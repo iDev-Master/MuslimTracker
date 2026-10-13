@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1f5c4a">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="myTracker">
+  <title>myTracker</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preload" href="fonts/amiri-700.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css?v=6">
+</head>
+<body>
+  <!-- Вход -->
+  <section id="login" class="login hidden">
+    <form id="loginForm" class="login-card">
+      <div class="login-mark">🌙</div>
+      <h1>myTracker</h1>
+      <p class="muted">Молитвы · Коран · Финансы</p>
+      <input id="password" type="password" autocomplete="current-password" placeholder="Пароль" required>
+      <button class="btn primary block" type="submit">Войти</button>
+      <p id="loginError" class="error"></p>
+    </form>
+  </section>
+
+  <div id="app" class="hidden">
+    <header class="top">
+      <h1 id="screenTitle">Молитвы</h1>
+      <div class="top-actions">
+        <button id="openSettings" class="icon-btn" title="Настройки" aria-label="Настройки">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        <button id="topSave" class="icon-btn save-btn" title="Сохранить" aria-label="Сохранить">
+          <svg class="i-save" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          <svg class="i-send" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>
+          <span id="saveBadge" class="badge hidden"></span>
+        </button>
+        <button id="logout" class="icon-btn" title="Выйти" aria-label="Выйти">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+        </button>
+      </div>
+    </header>
+    <button id="pendingBar" class="pending hidden" type="button"></button>
+
+    <main>
+      <!-- Дашборды -->
+      <section id="tab-dash" class="tab hidden">
+        <div id="sPeriod" class="seg wrap">
+          <button type="button" data-p="today">Сегодня</button>
+          <button type="button" data-p="week">Неделя</button>
+          <button type="button" data-p="10d">10 дней</button>
+          <button type="button" data-p="month" class="on">Месяц</button>
+          <button type="button" data-p="prev">Прошлый</button>
+          <button type="button" data-p="year">Год</button>
+          <button type="button" data-p="all">Всё</button>
+        </div>
+        <div id="statsBody"></div>
+      </section>
+
+      <!-- Молитвы -->
+      <section id="tab-prayers" class="tab">
+        <div class="date-nav">
+          <button class="icon-btn" data-shift="-1" aria-label="Предыдущий день">‹</button>
+          <input type="date" id="pDate">
+          <button class="icon-btn" data-shift="1" aria-label="Следующий день">›</button>
+        </div>
+        <button id="nowTile" class="now-tile" type="button"></button>
+        <p id="pState" class="muted small center"></p>
+        <div id="prayerRows" class="card"></div>
+        <div class="card">
+          <label class="lbl" for="pComment">Комментарий</label>
+          <textarea id="pComment" rows="1" maxlength="1000" placeholder="Необязательно"></textarea>
+        </div>
+        <button id="pAllBest" class="btn ghost block" type="button">Отметить остальные «Best time»</button>
+        <p class="hint-save">Отметки сохраняются на телефоне сразу. Кнопка ✓ вверху отправляет всё неотправленное — со всех вкладок</p>
+        <h2 id="pRecentTitle">Последние 7 дней</h2>
+        <div id="pRecent" class="list"></div>
+        <p class="hint-swipe">Нажмите на день, чтобы открыть · Свайп влево — скрыть</p>
+      </section>
+
+      <!-- Коран -->
+      <section id="tab-quran" class="tab hidden">
+        <div id="rEdit" class="edit-banner hidden"><span></span><button type="button" class="link">Отмена</button></div>
+        <div class="card">
+          <label class="lbl" for="rDate">Дата</label>
+          <input type="date" id="rDate">
+          <label class="lbl">Вид</label>
+          <div id="rKind" class="seg"></div>
+          <label class="lbl">Что читал</label>
+          <div id="rType" class="seg">
+            <button type="button" data-v="pages" class="on">Страницы</button>
+            <button type="button" data-v="suras">Суры</button>
+          </div>
+          <div id="rPages">
+            <div class="row gap">
+              <div class="grow"><label class="lbl" for="rFrom">С стр.</label><input id="rFrom" type="number" inputmode="numeric" min="1" max="604"></div>
+              <div class="grow"><label class="lbl" for="rTo">По стр.</label><input id="rTo" type="number" inputmode="numeric" min="1" max="604"></div>
+            </div>
+          </div>
+          <div id="rSuras" class="hidden">
+            <input id="suraSearch" type="search" placeholder="Поиск: номер или название">
+            <div id="suraChosen" class="chips"></div>
+            <div id="suraList" class="sura-list"></div>
+          </div>
+          <label class="lbl">Повторов</label>
+          <div class="stepper">
+            <button type="button" class="icon-btn" data-rep="-1">−</button>
+            <input id="rRepeats" type="number" inputmode="numeric" min="1" value="1">
+            <button type="button" class="icon-btn" data-rep="1">+</button>
+          </div>
+          <p id="rSummary" class="summary"></p>
+          <label class="lbl" for="rComment">Комментарий</label>
+          <textarea id="rComment" rows="1" maxlength="1000" placeholder="Необязательно"></textarea>
+        </div>
+        <p class="hint-save">✓ вверху — сохранить запись и отправить всё неотправленное</p>
+        <h2 id="rRecentTitle">Последние 10 дней</h2>
+        <div id="rRecent" class="list"></div>
+        <p class="hint-swipe">Нажмите на запись, чтобы изменить · Свайп влево — скрыть</p>
+      </section>
+
+      <!-- Финансы -->
+      <section id="tab-finance" class="tab hidden">
+        <div id="recurBox" class="card recur-box hidden"></div>
+        <div id="fEdit" class="edit-banner hidden"><span></span><button type="button" class="link">Отмена</button></div>
+        <div class="card">
+          <label class="lbl" for="fAmount" id="fAmountLbl">Сумма (с)</label>
+          <input id="fAmount" type="text" inputmode="decimal" placeholder="150 или 27+110" class="big">
+          <p id="fCalc" class="muted small"></p>
+          <label class="lbl">Действие</label>
+          <div id="fAction" class="seg wrap"></div>
+          <div id="fCatWrap">
+            <label class="lbl">Категория</label>
+            <div id="fCategory" class="chips select"></div>
+            <div id="fBudget" class="budget-hint hidden"></div>
+          </div>
+          <div id="fAccWrap" class="hidden">
+            <label class="lbl" id="fAccLbl">Счёт / карта</label>
+            <div id="fAccount" class="chips select"></div>
+          </div>
+          <div id="fToWrap" class="hidden">
+            <label class="lbl">Куда</label>
+            <div id="fTo" class="chips select"></div>
+          </div>
+          <label class="lbl" for="fDate">Дата</label>
+          <input type="date" id="fDate">
+          <label class="lbl" for="fComment">Комментарий</label>
+          <textarea id="fComment" rows="1" maxlength="1000" placeholder="На что / кому"></textarea>
+        </div>
+        <button id="fSave" class="btn primary block" type="button">Добавить в список</button>
+
+        <div id="queueBox" class="queue hidden">
+          <div class="queue-head">
+            <h2>Новые записи</h2>
+            <span id="queueTotal" class="muted small"></span>
+          </div>
+          <div id="fQueue" class="list"></div>
+          <p class="hint-swipe">Хранятся на телефоне до отправки кнопкой ➤ вверху или автоматически · Свайп влево — убрать</p>
+        </div>
+
+        <h2 id="fRecentTitle">Последние 10 дней</h2>
+        <div id="fRecent" class="list"></div>
+        <p class="hint-swipe">Нажмите на запись, чтобы изменить · Свайп влево — скрыть</p>
+      </section>
+    </main>
+
+    <nav class="tabs">
+      <button data-tab="dash"><span>📊</span>Дашборды</button>
+      <button data-tab="prayers" class="on"><span>🕌</span>Молитвы</button>
+      <button data-tab="quran"><span>📖</span>Коран</button>
+      <button data-tab="finance"><span>💰</span>Финансы</button>
+    </nav>
+  </div>
+
+  <!-- Настройки: секция на каждый модуль -->
+  <div id="settings" class="sheet hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="sheet-panel">
+      <div class="sheet-head">
+        <h2 id="settingsTitle">Настройки</h2>
+        <div class="lang-switch" role="group" aria-label="Язык / Language">
+          <button type="button" data-lang="ru" aria-label="Русский" title="Русский">🇷🇺</button>
+          <button type="button" data-lang="en" aria-label="English" title="English">🇬🇧</button>
+        </div>
+        <button id="closeSettings" class="icon-btn" aria-label="Закрыть">×</button>
+      </div>
+
+      <details class="set-sec" open>
+        <summary><span>⚙️</span>Общие</summary>
+        <div class="set-body">
+          <label class="switch-row" for="autoSend">
+            <span><b>Автоотправка</b><br><span class="muted small">Сразу при сохранении, раз в минуту и при сворачивании. Без интернета данные ждут на телефоне.</span></span>
+            <input type="checkbox" id="autoSend" class="switch" checked>
+          </label>
+          <div class="set-row"><span>Тема</span>
+            <select data-set="theme"><option value="auto">Как в телефоне</option><option value="light">Светлая</option><option value="dark">Тёмная</option></select></div>
+          <div class="set-row"><span>Вкладка при запуске</span>
+            <select data-set="startTab"><option value="last">Последняя открытая</option><option value="prayers">Молитвы</option><option value="dash">Дашборды</option><option value="quran">Коран</option><option value="finance">Финансы</option></select></div>
+          <div class="set-group">
+            <div class="lbl">Данные</div>
+            <p id="syncInfo" class="small" style="margin:0 0 8px"></p>
+            <button id="forceSync" class="btn ghost block" type="button">Загрузить всё заново с сервера</button>
+          </div>
+          <div class="set-group">
+            <div class="lbl">Экспорт и импорт CSV</div>
+            <p class="muted small">Экспорт — файл для Excel или Google Таблиц. Импорт принимает файлы в том же формате: повторы по номеру записи пропускаются, у молитв заполняются только пустые отметки.</p>
+            <div class="csv-btns"><button class="btn ghost" type="button" data-csv="finance">⬇ Финансы</button><button class="btn ghost" type="button" data-csv="prayers">⬇ Молитвы</button><button class="btn ghost" type="button" data-csv="reading">⬇ Коран</button></div>
+            <label class="btn ghost block file-btn">⬆ Импорт из CSV<input type="file" id="csvFile" accept=".csv,text/csv,text/plain" hidden></label>
+            <p id="csvInfo" class="small"></p>
+          </div>
+          <div class="set-group">
+            <div class="lbl">Скрытые записи</div>
+            <p id="hiddenInfo" class="small" style="margin:0 0 8px"></p>
+            <button id="unhideAll" class="btn ghost block" type="button">Показать скрытые снова</button>
+          </div>
+          <p class="muted small" id="appVersion" style="margin:10px 0 0"></p>
+        </div>
+      </details>
+
+      <details class="set-sec">
+        <summary><span>🕌</span>Молитвы</summary>
+        <div class="set-body">
+          <div class="set-group first">
+            <div class="lbl">Названия молитв</div>
+            <div class="set-row"><span>Набор названий</span>
+              <select id="pnPreset"><option value="ar">العربية · арабские</option><option value="ru">Русские: Фаджр, Зухр…</option><option value="tj">Тоҷикӣ: Бомдод, Пешин…</option><option value="en">English: Fajr, Dhuhr…</option><option value="custom">Свои названия</option></select></div>
+            <div id="pnNames" class="pn-names"></div>
+            <label class="switch-row"><span>Показывать Духа</span><input type="checkbox" class="switch sm" id="pnDuha"></label>
+            <label class="switch-row"><span>Показывать Витр</span><input type="checkbox" class="switch sm" id="pnWitr"></label>
+            <p class="muted small">Скрытая молитва пропадает из отметок, списков и дашбордов. Записи в таблице остаются.</p>
+            <button id="pnSave" class="btn primary block" type="button">Сохранить названия</button>
+          </div>
+          <div class="set-group">
+            <div class="lbl">Статусы</div>
+            <p class="muted small">Можно переименовать и скрыть. Цвет и смысл статуса зависят от его места в списке: первые два считаются «вовремя». При переименовании старые записи тоже переименуются.</p>
+            <div id="stEditor"></div>
+            <button id="stColorsReset" class="btn ghost block" type="button">Вернуть стандартные цвета</button>
+            <button id="stSave" class="btn primary block" type="button">Сохранить статусы</button>
+          </div>
+          <div class="set-group">
+          <div class="lbl">Отметки</div>
+          <div class="set-row"><span>Кнопка «Отметить остальные»</span><select data-set="prayer.fill" data-options="statuses" data-idx data-num></select></div>
+          <label class="switch-row"><span>После отметки — к следующей молитве</span><input type="checkbox" class="switch sm" data-set="prayer.autoNext"></label>
+          <label class="switch-row"><span>Плитка «Сейчас» с временем молитвы</span><input type="checkbox" class="switch sm" data-set="prayer.showTile"></label>
+          <div class="set-row"><span>Дней в списке</span><select data-set="prayer.days" data-num><option>7</option><option>14</option><option>30</option></select></div>
+          </div>
+        </div>
+      </details>
+
+      <details class="set-sec">
+        <summary><span>📖</span>Коран</summary>
+        <div class="set-body">
+          <div class="set-row"><span>Вид по умолчанию</span><select data-set="quran.kind" data-options="kinds"></select></div>
+          <div class="set-row"><span>Что читал по умолчанию</span><select data-set="quran.type"><option value="pages">Страницы</option><option value="suras">Суры</option></select></div>
+          <label class="switch-row"><span>Следующая запись — со следующей страницы</span><input type="checkbox" class="switch sm" data-set="quran.continuePages"></label>
+          <div class="set-row"><span>Дней в списке</span><select data-set="quran.days" data-num><option>10</option><option>30</option><option>60</option></select></div>
+          <div class="set-group">
+            <div class="lbl">Хифз: заучено ранее</div>
+            <p class="muted small">Отметьте суры или страницы, которые вы уже знаете. На карте хифза они станут зелёными и будут бледнеть, если их долго не повторять. Записи «Повторение» снова делают их зелёными.</p>
+            <div class="hz-quick"><button type="button" class="chip" data-hzq="30">Джуз 30 (78–114)</button><button type="button" class="chip" data-hzq="29">Джуз 29 (67–77)</button><button type="button" class="chip" data-hzq="clear">Очистить</button></div>
+            <input type="search" id="hzSearch" placeholder="Поиск суры: номер или название">
+            <div id="hzSuras" class="hz-suras"></div>
+            <label class="lbl" for="hzPages">Страницы (необязательно)</label>
+            <input type="text" id="hzPages" placeholder="Например: 1-21, 582-604">
+            <label class="lbl" for="hzDate">Когда последний раз повторяли</label>
+            <input type="date" id="hzDate">
+            <p id="hzInfo" class="muted small"></p>
+            <button id="hzSave" class="btn primary block" type="button">Сохранить заученное</button>
+          </div>
+          <div class="set-row"><span>Зелёный — повторено за (дней)</span><select data-set="quran.fresh" data-num><option>3</option><option>7</option><option>14</option><option>30</option></select></div>
+          <div class="set-row"><span>Бледнеет после (дней)</span><select data-set="quran.stale" data-num><option>14</option><option>30</option><option>60</option><option>90</option></select></div>
+        </div>
+      </details>
+
+      <details class="set-sec" id="finSettings">
+        <summary><span>💰</span>Финансы</summary>
+        <div class="set-body">
+          <div class="set-group">
+            <div class="lbl">Счета и карты</div>
+            <p class="muted small" style="margin:0 0 8px">Иконка, название, начальный остаток. ● — счёт по умолчанию. 📦 — убрать в архив (старые записи останутся). При переименовании записи в таблице тоже переименуются.</p>
+            <div id="accEditor"></div>
+            <button id="accAdd" class="btn ghost block" type="button">＋ Добавить счёт или карту</button>
+            <div class="lbl" style="margin-top:14px">Счёт по умолчанию для действий</div>
+            <div id="accDefaults"></div>
+            <div class="row gap" style="margin-top:10px">
+              <button id="accReset" class="btn ghost grow" type="button">Отменить</button>
+              <button id="accSave" class="btn primary grow" type="button">Сохранить счета</button>
+            </div>
+          </div>
+          <div class="set-group">
+            <div class="lbl">Регулярные платежи</div>
+            <p class="muted small">Аренда, связь, кредит… Платёж появится вверху вкладки «Финансы» в день оплаты (и заранее, если задать напоминание). С «Авто» запись добавится сама ночью в день платежа.</p>
+            <div id="rcList"></div>
+            <div id="rcForm" class="rc-form hidden"></div>
+            <button id="rcAdd" class="btn ghost block" type="button">＋ Добавить платёж</button>
+          </div>
+          <div class="set-group">
+            <div class="lbl">Бюджеты на месяц</div>
+            <p class="muted small">Лимит расходов по категории на календарный месяц. При 80% и при превышении приложение предупредит. Пустое поле — без лимита.</p>
+            <div id="bgEditor"></div>
+            <div class="row gap" style="margin-top:10px">
+              <button id="bgReset" class="btn ghost grow" type="button">Отменить</button>
+              <button id="bgSave" class="btn primary grow" type="button">Сохранить лимиты</button>
+            </div>
+          </div>
+          <div class="set-group">
+            <div class="lbl">Действия и категории</div>
+            <p class="muted small" style="margin:0 0 10px">«Поток»: <b>Приход</b> увеличивает остаток, <b>Расход</b> уменьшает, <b>Нет</b> не влияет (например, «Перевод» между своими счетами).</p>
+            <div id="refEditor"></div>
+            <button id="refAddAction" class="btn ghost block" type="button">＋ Добавить действие</button>
+            <div class="row gap" style="margin-top:10px">
+              <button id="refReset" class="btn ghost grow" type="button">Отменить</button>
+              <button id="refSave" class="btn primary grow" type="button">Сохранить</button>
+            </div>
+          </div>
+          <div class="set-row"><span>Валюта</span><input type="text" data-set="finance.currency" maxlength="6" class="short-in"></div>
+          <div class="set-row"><span>Дней в списке</span><select data-set="finance.days" data-num><option>10</option><option>30</option><option>60</option></select></div>
+        </div>
+      </details>
+
+      <details class="set-sec" id="goalsCard">
+        <summary><span>🎯</span>Цели</summary>
+        <div class="set-body">
+          <p class="muted small">Цели показываются на дашборде в блоке «Цели»: прогресс за день, неделю, месяц или год и сколько осталось.</p>
+          <div id="glEditor"></div>
+          <button id="glAdd" class="btn ghost block" type="button">＋ Добавить цель</button>
+          <button id="glSave" class="btn primary block" type="button">Сохранить цели</button>
+        </div>
+      </details>
+
+      <details class="set-sec" id="notifyCard">
+        <summary><span>🔔</span>Напоминания</summary>
+        <div class="set-body">
+          <div class="set-group first">
+            <div class="lbl">На этом телефоне</div>
+            <label class="switch-row"><span><b>Уведомления о молитвах</b><br><span class="muted small">Когда приложение открыто или свёрнуто недавно. Телефон может не показать их, если приложение давно закрыто — для надёжности подключите Telegram.</span></span><input type="checkbox" class="switch" id="ntLocal"></label>
+            <p id="ntLocalInfo" class="muted small"></p>
+            <button id="ntLocalTest" class="btn ghost block" type="button">🧪 Тест уведомления на телефоне</button>
+          </div>
+          <div class="set-group">
+            <div class="lbl">Telegram</div>
+            <p id="tgInfo" class="small"></p>
+            <div class="row gap"><button id="tgLink" class="btn ghost grow" type="button">Подключить</button><button id="tgTest" class="btn ghost grow" type="button">Отправить тест</button></div>
+            <button id="tgTestLater" class="btn ghost block" type="button">🧪 Тест автонапоминания через 2 минуты</button>
+            <p class="muted small">«Отправить тест» — сообщение сразу. «Тест автонапоминания» срабатывает так же, как напоминание о молитве: сам, через 2 минуты, даже если закрыть приложение.</p>
+            <label class="switch-row"><span><b>Напоминания в Telegram</b><br><span class="muted small">Приходят, даже когда приложение закрыто</span></span><input type="checkbox" class="switch" id="ntTg"></label>
+          </div>
+          <div class="set-group">
+            <div class="lbl">О чём напоминать</div>
+            <div id="ntPrayers" class="chips select"></div>
+            <div class="set-row"><span>Когда</span><select id="ntBefore"><option value="0">В начале времени</option><option value="5">За 5 минут</option><option value="10">За 10 минут</option><option value="15">За 15 минут</option><option value="30">За 30 минут</option></select></div>
+            <label class="switch-row"><span>Платежи (в Telegram)</span><input type="checkbox" class="switch sm" id="ntPay"></label>
+            <div class="set-row"><span>Время напоминания о платежах</span><select id="ntHour"></select></div>
+            <label class="switch-row"><span>Превышение лимита (в Telegram)</span><input type="checkbox" class="switch sm" id="ntBudget"></label>
+            <button id="ntSave" class="btn primary block" type="button">Сохранить напоминания</button>
+          </div>
+        </div>
+      </details>
+
+      <details class="set-sec" id="widgetsCard">
+        <summary><span>📊</span>Дашборд</summary>
+        <div class="set-body">
+          <div class="set-row"><span>Период при открытии</span>
+            <select data-set="dash.period"><option value="last">Последний выбранный</option><option value="10d">10 дней</option><option value="month">Месяц</option><option value="prev">Прошлый месяц</option><option value="year">Год</option><option value="all">Всё время</option></select></div>
+          <div class="lbl">Блоки</div>
+          <p class="muted small" style="margin:0 0 6px">Включайте нужные и меняйте порядок стрелками.</p>
+          <div id="widgetList"></div>
+          <button id="widgetsReset" class="btn ghost block" type="button" style="margin-top:8px">Вернуть как было</button>
+          <div class="set-group">
+            <div class="lbl">Плитки карт</div>
+            <p class="muted small" style="margin:0 0 6px">Какие счета показывать плитками и что на них: приход и расход за период или только баланс. Нажатие на плитку на дашборде показывает все блоки только по этой карте.</p>
+            <div id="cardTiles"></div>
+          </div>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <div id="banner" class="banner hidden" role="alert"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="config.js?v=6"></script>
+  <script src="i18n.js?v=6"></script>
+  <script src="app.js?v=6"></script>
+</body>
+</html>
