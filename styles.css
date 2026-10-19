@@ -780,3 +780,104 @@ input.time-in { width: 128px; flex: none; min-height: 40px; padding: 6px 8px; te
 .m-pg.done { border-color: var(--accent); color: var(--accent); }
 .m-pg.done::before { content: "✓ "; }
 .m-auto { width: 100%; text-align: center; }
+
+/* ── переключатели в одну строку: без переносов; если не помещается — листается вбок */
+.seg, .seg.wrap { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+.seg::-webkit-scrollbar { display: none; }
+.seg button, .seg.wrap button { flex: 1 0 auto; overflow: visible; text-overflow: clip; padding: 9px 10px; }
+.seg.ovf { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+.seg.ovf.end { -webkit-mask-image: linear-gradient(90deg, transparent, #000 28px); mask-image: linear-gradient(90deg, transparent, #000 28px); }
+@media (max-width: 380px) { .seg button, .seg.wrap button { font-size: 13.5px; padding: 9px 8px; } }
+
+/* ── дашборд: нажимаемые плитки и подробности */
+.kpi-btn { font: inherit; color: inherit; text-align: left; cursor: pointer; width: 100%; display: block; }
+.kpi-btn:active, button.bar-row:active, .fd-sum button:active { transform: scale(.985); }
+button.bar-row { font: inherit; color: inherit; background: none; border: 0; width: 100%; text-align: left; padding: 0; cursor: pointer; }
+.bar-row b .muted { font-weight: 600; }
+.bar.in i { background: var(--plus); }
+.fd-big { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.fd-big.pos { color: var(--plus); }
+.fd-sum { display: grid; gap: 6px; margin-bottom: 12px; }
+.fd-sum > div, .fd-sum > button { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); font: inherit; color: inherit; text-align: left; }
+.fd-sum > button { cursor: pointer; }
+.fd-sum b { font-size: 17px; font-variant-numeric: tabular-nums; }
+.fd-sum .fd-total { background: var(--accent-soft); border-color: transparent; }
+.fd-sum .fd-total b { font-size: 20px; }
+button.acc-row.fd-acc { font: inherit; color: inherit; background: none; border: 0; border-bottom: 1px solid var(--line); width: 100%; text-align: left; cursor: pointer; }
+.fd-item { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.fd-item .ic { flex: none; width: 24px; text-align: center; }
+.fd-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.fd-main > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fd-item b { flex: none; font-variant-numeric: tabular-nums; }
+#fsBody .lbl { margin-top: 14px; }
+/* столбцы */
+.fb-chart { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 2px; align-items: end; height: 150px; margin: 10px 0 4px; }
+.fb-col { all: unset; box-sizing: border-box; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; cursor: pointer; min-width: 0; border-radius: 6px; }
+.fb-col.sel { background: var(--accent-soft); }
+.fb-bars { flex: 1; display: flex; align-items: flex-end; justify-content: center; gap: 1px; min-height: 0; padding: 0 1px; }
+.fb-bars i { flex: 1; max-width: 22px; min-height: 0; border-radius: 3px 3px 0 0; }
+.fb-in { background: var(--plus); }
+.fb-ex { background: var(--accent); }
+.fb-l { font-size: 10px; color: var(--muted); text-align: center; height: 14px; line-height: 14px; white-space: nowrap; overflow: visible; }
+.fb-info { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; min-height: 20px; align-items: center; }
+.fb-info span { display: inline-flex; align-items: center; gap: 6px; }
+.fb-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.fb-dot.in { background: var(--plus); } .fb-dot.ex { background: var(--accent); }
+.seg.fb-g { margin: 6px 0; }
+.seg.fb-g button { min-height: 34px; padding: 6px 10px; font-size: 13px; }
+.w-head .seg.fb-g { margin: 0; }
+
+/* ── арабский текст везде шрифтом Amiri: «Amiri» стоит первым, но подключён только для арабских букв (unicode-range),
+   поэтому русский и латиница остаются системным шрифтом */
+:root { --ui-font: "Amiri", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+body { font-family: var(--ui-font); }
+input, select, textarea, button, option { font-family: var(--ui-font); }
+.diag { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.diag li { padding: 8px 10px; border-radius: 10px; background: var(--bg); line-height: 1.4; overflow-wrap: anywhere; }
+.diag li.bad { background: rgba(179, 38, 30, .08); }
+.seg.tight button { font-size: 13px; padding: 8px 7px; letter-spacing: -.01em; }
+.seg.tight { gap: 2px; }
+#fAction button, #sPeriod button, #rKind button, #rType button { flex: 1 0 auto; padding: 9px 10px; min-width: auto; }
+.seg.tight button, #fAction.tight button, #sPeriod.tight button, #rKind.tight button { padding: 8px 7px; font-size: 13px; }
+
+/* ── выбор человека: поле с выпадающим списком */
+.pcombo { position: relative; }
+.pcombo input { width: 100%; padding-right: 64px; }
+.pc-arrow { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 14px; cursor: pointer; padding: 6px; }
+.pc-clear { position: absolute; right: 36px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: var(--muted); font-size: 22px; line-height: 1; width: 30px; height: 30px; cursor: pointer; border-radius: 50%; }
+.pc-list { position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 4px); max-height: 264px; overflow: auto; background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.14); overscroll-behavior: contain; }
+.pc-list button { display: flex; width: 100%; gap: 10px; align-items: center; text-align: left; font: inherit; font-size: 15px; padding: 11px 12px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; min-height: 44px; }
+.pc-list button:last-child { border-bottom: 0; }
+.pc-list button.on { background: var(--accent-soft); font-weight: 600; }
+.pc-list button.hi { background: var(--bg); }
+.pc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-list b, .pc-d { flex: none; font-size: 13px; font-variant-numeric: tabular-nums; }
+.pc-new { color: var(--accent) !important; font-weight: 600; }
+.pc-empty { padding: 12px; }
+#fPersonHint { margin: 6px 0 0; }
+
+/* ── своя клавиатура для суммы */
+.numpad { position: fixed; left: 0; right: 0; bottom: 0; z-index: 35; background: var(--card); border-top: 1px solid var(--line);
+  box-shadow: 0 -6px 24px rgba(0,0,0,.12); padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); max-width: 560px; margin: 0 auto;
+  border-radius: 16px 16px 0 0; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+.np-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 4px 8px 8px; min-height: 30px; font-variant-numeric: tabular-nums; }
+.np-expr { font-size: 17px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; direction: ltr; }
+.np-res { font-size: 15px; color: var(--accent); font-weight: 700; flex: none; }
+.np-keys { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.np-keys button { font: inherit; font-size: 24px; font-weight: 600; height: 52px; border: 0; border-radius: 12px; background: var(--bg); color: var(--ink); cursor: pointer; padding: 0; }
+.np-keys button.op { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.np-keys button.eq { background: var(--accent-soft); }
+.np-keys button.done { background: var(--accent); color: var(--accent-ink); font-size: 22px; }
+.np-keys button.press { filter: brightness(.9); transform: scale(.97); }
+@media (max-width: 360px) { .np-keys button { height: 48px; font-size: 22px; } }
+html.np-open body { padding-bottom: 300px; }
+
+/* ── поля не слипаются */
+#fSave { margin-bottom: 12px; }
+#fSave + .card, #fSave + .hint-save { margin-top: 12px; }
+input.switch { min-height: 0; padding: 0; height: 28px; align-self: center; }
+input.switch.sm { height: 24px; }
+.st-edit { align-items: center; }
+.row.gap > .btn { align-self: stretch; }
+.upd-banner { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 45; font: inherit; font-size: 14px; font-weight: 600;
+  background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 999px; padding: 10px 16px; box-shadow: 0 6px 20px rgba(0,0,0,.2); cursor: pointer; width: max-content; max-width: calc(100% - 32px); }

@@ -12,7 +12,7 @@
  */
 
 // ───────────────────────────── Настройки ─────────────────────────────
-var SERVER_BUILD = 12;         // растёт с каждым исправлением сервера; приложение проверяет его
+var SERVER_BUILD = 13;         // растёт с каждым исправлением сервера; приложение проверяет его
 var APP_VERSION = 6;            // должна совпадать с APP_VERSION в app.js
 
 var CFG = {
@@ -144,7 +144,7 @@ function setup() {
   var props = PropertiesService.getScriptProperties();
   props.setProperty('SPREADSHEET_ID', ss.getId());
   if (!props.getProperty('TOKEN_SECRET')) props.setProperty('TOKEN_SECRET', Utilities.getUuid() + Utilities.getUuid());
-  ss.setSpreadsheetTimeZone(Session.getScriptTimeZone());
+  ss.setSpreadsheetTimeZone(tz_());
 
   // миграции — до записи новых заголовков
   var notes = migrateV1_(ss).concat(migrateV3_(ss), migrateV4_(ss), migrateV5_(ss));
@@ -185,7 +185,10 @@ function setup() {
 
   var msg = 'Готово. Листы и дашборды настроены.' + (notes.length ? '\n\n' + notes.join('\n') : '') +
     (props.getProperty('APP_PASSWORD') ? '' : '\n\n⚠ Добавьте свойство APP_PASSWORD в «Настройки проекта → Свойства скрипта».');
-  try { SpreadsheetApp.getUi().alert(msg); } catch (e) { Logger.log(msg); }
+  // окно alert() ждёт нажатия «ОК» в таблице — при запуске из редактора это выглядело как зависание (6 минут и «Exceeded maximum execution time»).
+  // Поэтому только журнал и всплывающая подсказка, которая ничего не ждёт.
+  Logger.log(msg);
+  try { ss.toast(msg.slice(0, 250), 'myTracker', 15); } catch (e) {}
 }
 
 function rebuildDashboard() {
@@ -195,7 +198,8 @@ function rebuildDashboard() {
 /** Сменили пароль? Запустите — все старые входы станут недействительны. */
 function resetSessions() {
   PropertiesService.getScriptProperties().setProperty('TOKEN_SECRET', Utilities.getUuid() + Utilities.getUuid());
-  try { SpreadsheetApp.getUi().alert('Все устройства разлогинены.'); } catch (e) {}
+  Logger.log('Все устройства разлогинены.');
+  try { SpreadsheetApp.getActiveSpreadsheet().toast('Все устройства разлогинены.', 'myTracker', 10); } catch (e) {}
 }
 
 /** v1 → v2: «Расходы» → «Финансы», новый «Справочник». */
@@ -597,6 +601,7 @@ function doPost(e) {
   try { req = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: 'Неверный запрос' }); }
   try {
     if (req.action === 'login') { var lr = login_(req.password); lr.v = APP_VERSION; return json_(lr); }
+    if (req.action === 'pushMsg') return json_({ ok: true, data: pushMsg_(req) }); // телефон забирает текст уведомления (по ключу подписки)
     if (!verifyToken_(req.token)) return json_({ ok: false, error: 'AUTH', message: 'Нужно войти заново', v: APP_VERSION });
     var routes = {
       bootstrap: bootstrap_, meta: meta_,
@@ -606,7 +611,8 @@ function doPost(e) {
       saveConfig: saveConfig_, saveStatuses: saveStatuses_, saveRecurring: saveRecurring_, skipRecurring: skipRecurring_,
       deleteReading: deleteReading_, deleteFinance: deleteFinance_, revertRecurring: revertRecurring_,
       savePeople: savePeople_, assignPerson: assignPerson_,
-      importCsv: importCsv_, tgState: tgStatus_, tgTestLater: tgTestLater_, tgQuranTest: tgQuranTest_, tgLink: tgLink_, tgTest: tgTest_, tgUnlink: tgUnlink_
+      importCsv: importCsv_, tgState: tgStatus_, tgTestLater: tgTestLater_, tgQuranTest: tgQuranTest_, tgLink: tgLink_, tgTest: tgTest_, tgUnlink: tgUnlink_,
+      pushKey: pushKey_, pushSub: pushSub_, pushUnsub: pushUnsub_, pushTest: pushTest_, notifyDiag: notifyDiag_, notifyRepair: notifyRepair_
     };
     var fn = routes[req.action];
     if (!fn) return json_({ ok: false, error: 'OLD_SERVER', message: 'Apps Script устарел: замените Code.gs и сделайте новое развертывание (Развертывания → Управление → ✏ → Новая версия).', v: APP_VERSION, b: SERVER_BUILD });
@@ -684,7 +690,15 @@ function sheet_(name) {
   if (!sh) throw new Error('Нет листа «' + name + '». Запустите setup() в редакторе Apps Script');
   return sh;
 }
-function tz_() { return Session.getScriptTimeZone(); }
+/** Часовой пояс пользователя: телефон сообщает его в настройках напоминаний; иначе — пояс проекта Apps Script. */
+var TZ_ = null;
+function tz_() {
+  if (TZ_) return TZ_;
+  var z = '';
+  try { var sh = ss_().getSheetByName(SH.CONFIG); if (sh && sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues().forEach(function (r) { if (String(r[0]).trim() === 'notify') { try { z = JSON.parse(r[1]).tz || ''; } catch (e) {} } }); } catch (e) {}
+  if (z) { try { Utilities.formatDate(new Date(), z, 'HH'); } catch (e) { z = ''; } }
+  return (TZ_ = z || Session.getScriptTimeZone());
+}
 
 function parseDate_(s) {
   var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ''));
@@ -1332,7 +1346,7 @@ function notifyCfg_() {
   var n = config_().notify || {};
   return { tg: !!n.tg, lang: n.lang === 'en' ? 'en' : 'ru', prayers: n.prayers || { fajr: true, zuhr: true, asr: true, maghrib: true, isha: true },
            before: Math.max(0, Number(n.before) || 0), payments: n.payments !== false, hour: Math.min(23, Math.max(0, Number(n.hour == null ? 8 : n.hour))),
-           budgets: n.budgets !== false, qrev: n.qrev || null, qmemo: n.qmemo || null };
+           budgets: n.budgets !== false, qrev: n.qrev || null, qmemo: n.qmemo || null, push: n.push !== false, tz: n.tz || '' };
 }
 /**
  * Запустите один раз из редактора (▶ authorize), чтобы Google спросил разрешение
@@ -1412,15 +1426,15 @@ function installNotifyTriggers_() {
     var h = t.getHandlerFunction();
     if (h === 'prayerAlert' || h === 'paymentReminder' || h === 'notifySweep' || h === 'quranRevReminder' || h === 'quranMemoReminder') ScriptApp.deleteTrigger(t);
   });
-  var cfg = notifyCfg_(), st = tgState_(), props = PropertiesService.getScriptProperties();
-  if (!st.linked) { props.deleteProperty('ALERTS'); return 0; }
+  var cfg = notifyCfg_(), ch = channels_(), props = PropertiesService.getScriptProperties();
+  if (!ch.linked && !ch.push) { props.deleteProperty('ALERTS'); return 0; }
   // напоминания о повторении и заучивании Корана в выбранное время (включаются отдельно, в ⚙ → Коран)
   [['qrev', 'quranRevReminder'], ['qmemo', 'quranMemoReminder']].forEach(function (x) {
     var q = cfg[x[0]]; if (!q || !q.on) return;
     var m = /^(\d{1,2}):(\d{2})$/.exec(q.time || ''), hh = m ? Number(m[1]) : 6, mm = m ? Number(m[2]) : 0;
     ScriptApp.newTrigger(x[1]).timeBased().atHour(hh).nearMinute(mm).everyDays(1).inTimezone(tz_()).create();
   });
-  if (!cfg.tg) { props.deleteProperty('ALERTS'); return 0; }
+  if (!ch.tg && !ch.push) { props.deleteProperty('ALERTS'); return 0; }
   ScriptApp.newTrigger('paymentReminder').timeBased().atHour(cfg.hour).everyDays(1).inTimezone(tz_()).create();
   // подстраховка: раз в 10 минут проверяем, не пропущено ли напоминание (и ставим расписание, если ночью не поставилось)
   ScriptApp.newTrigger('notifySweep').timeBased().everyMinutes(10).create();
@@ -1431,8 +1445,9 @@ function installNotifyTriggers_() {
 }
 /** Расписание напоминаний на сегодня: [{k, start (мин), at (мс)}]. */
 function alertPlan_() {
-  var cfg = notifyCfg_(), now = new Date(), today = fmtDate_(now), base = new Date(now);
-  base.setHours(0, 0, 0, 0);
+  var cfg = notifyCfg_(), now = new Date(), today = fmtDate_(now);
+  // полночь по часовому поясу пользователя (а не по поясу проекта Apps Script)
+  var hms = Utilities.formatDate(now, tz_(), 'HH:mm:ss').split(':'), base = new Date(now.getTime() - ((Number(hms[0]) * 60 + Number(hms[1])) * 60 + Number(hms[2])) * 1000 - now.getMilliseconds());
   var starts = prayerStarts_(today), items = [];
   Object.keys(starts).forEach(function (k) {
     if (!cfg.prayers[k] || starts[k] == null) return;
@@ -1444,7 +1459,7 @@ function alertPlan_() {
 function hhmm_(m) { m = ((m % 1440) + 1440) % 1440; return ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + (m % 60)).slice(-2); }
 /** Отправить все напоминания, время которых наступило (не позже 25 минут назад) и которые ещё не отправлены. */
 function sendDueAlerts_() {
-  var cfg = notifyCfg_(); if (!cfg.tg || !tgState_().linked) return 0;
+  var cfg = notifyCfg_(), ch = channels_(); if (!ch.tg && !ch.push) return 0;
   var props = PropertiesService.getScriptProperties(), plan = alertPlan_(), now = Date.now();
   var sent = JSON.parse(props.getProperty('ALERTS_SENT') || '{}');
   if (sent.date !== plan.date) sent = { date: plan.date, keys: [] };
@@ -1452,9 +1467,10 @@ function sendDueAlerts_() {
   plan.items.forEach(function (a) {
     if (a.at > now + 60000 || now - a.at > 25 * 60000 || sent.keys.indexOf(a.k) >= 0) return;
     var head = cfg.before ? T.soon.replace('{m}', cfg.before) : T.start;
-    if (tgSend_('🕌 <b>' + names[a.k] + '</b> · ' + hhmm_(a.start) + '\n' + head)) { sent.keys.push(a.k); n++; }
+    if (notifyAll_('🕌 ' + names[a.k] + ' · ' + hhmm_(a.start), head, '🕌 <b>' + names[a.k] + '</b> · ' + hhmm_(a.start) + '\n' + head, 'prayer-' + a.k, true)) { sent.keys.push(a.k); n++; }
   });
   props.setProperty('ALERTS_SENT', JSON.stringify(sent));
+  if (n) props.setProperty('LAST_SENT', String(Date.now()));
   return n;
 }
 /**
@@ -1462,7 +1478,7 @@ function sendDueAlerts_() {
  * Если сообщение пришло само — значит, напоминания о молитвах тоже будут приходить.
  */
 function tgTestLater_(req) {
-  if (!tgState_().linked) throw new Error('Сначала подключите Telegram');
+  if (!tgState_().linked && !pushSubs_().length) throw new Error('Сначала подключите Telegram или уведомления на телефоне');
   var min = Math.min(30, Math.max(1, Number(req && req.minutes) || 2)), at = new Date(Date.now() + min * 60000);
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'testAlert') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('testAlert').timeBased().at(at).create();
@@ -1477,7 +1493,9 @@ function testAlert(e) {
   var cfg = notifyCfg_(), en = cfg.lang === 'en', f = function (ms) { return Utilities.formatDate(new Date(ms), tz_(), 'HH:mm'); };
   var plan = alertPlan_(), now = Date.now(), names = customPrayerNames_(cfg.lang);
   var next = plan.items.filter(function (a) { return a.at > now; }).map(function (a) { return names[a.k] + ' ' + hhmm_(a.start - cfg.before); });
-  tgSend_('🧪 <b>' + (en ? 'Automatic reminder test' : 'Тест автонапоминания') + '</b>\n' +
+  var tmsg = (en ? 'Ordered at ' : 'Заказан в ') + (t.made ? f(t.made) : '—') + (en ? ', arrived at ' : ', пришёл в ') + f(now);
+  try { pushSend_('🧪 ' + (en ? 'Automatic reminder test' : 'Тест автонапоминания'), tmsg, 'test2'); } catch (x) {}
+  if (tgState_().linked) tgSend_('🧪 <b>' + (en ? 'Automatic reminder test' : 'Тест автонапоминания') + '</b>\n' +
     (en ? 'Ordered at ' : 'Заказан в ') + (t.made ? f(t.made) : '—') + (en ? ', arrived at ' : ', пришёл в ') + f(now) + '.\n' +
     (!cfg.tg ? (en ? '⚠️ Telegram reminders are OFF in the app settings.' : '⚠️ Напоминания в Telegram выключены в настройках приложения.')
       : !plan.hasTimes ? (en ? '⚠️ No row for today in the prayer times sheet.' : '⚠️ На сегодня нет строки в листе «Времена молитв».')
@@ -1492,8 +1510,9 @@ function prayerAlert(e) {
 function notifySweep() {
   var props = PropertiesService.getScriptProperties(), al = {};
   try { al = JSON.parse(props.getProperty('ALERTS') || '{}'); } catch (e) {}
-  if (al.date !== fmtDate_(new Date())) { installNotifyTriggers_(); }
-  withLock_(sendDueAlerts_);
+  props.setProperty('LAST_SWEEP', String(Date.now()));
+  try { if (al.date !== fmtDate_(new Date())) { installNotifyTriggers_(); } } catch (e) { noteErr_('Расписание: ' + e.message); }
+  try { withLock_(sendDueAlerts_); } catch (e) { noteErr_('Отправка: ' + e.message); }
 }
 /**
  * Проверка напоминаний: запустите из редактора (▶ checkReminders) — в журнале будет видно,
@@ -1515,7 +1534,7 @@ function customPrayerNames_(lang) {
 }
 /** Ежедневно: платежи, у которых сегодня срок, просрочка или скоро напоминание. */
 function paymentReminder() {
-  var cfg = notifyCfg_(); if (!cfg.tg || !cfg.payments) return;
+  var cfg = notifyCfg_(), ch = channels_(); if ((!ch.tg && !ch.push) || !cfg.payments) return;
   var T = TG_TEXT_[cfg.lang], t = fmtDate_(new Date()), lines = [];
   var days = function (a, b) { return Math.round((parseDate_(b) - parseDate_(a)) / 864e5); };
   recurring_().filter(function (r) { return r.active && r.next; }).forEach(function (r) {
@@ -1524,12 +1543,12 @@ function paymentReminder() {
     if (r.auto && d >= 0) { if (d === 0) lines.push('↻ ' + r.name + ' — ' + r.amount + ' (' + T.auto + ')'); return; }
     lines.push((d < 0 ? '⚠️ ' : d === 0 ? '🔔 ' : '🗓 ') + '<b>' + r.name + '</b> — ' + r.amount + ' · ' + (d < 0 ? T.overdue : d === 0 ? T.today : d === 1 ? T.tomorrow : T.inDays.replace('{d}', d)));
   });
-  if (lines.length) tgSend_('💳 <b>' + T.pay + '</b>\n' + lines.join('\n'));
+  if (lines.length) notifyAll_('💳 ' + T.pay, stripHtml_(lines.join('\n')), '💳 <b>' + T.pay + '</b>\n' + lines.join('\n'), 'pay', true);
 }
 /** После новых расходов: сообщить в Telegram о превышении месячного лимита. */
 function budgetAlerts_(rows) {
   try {
-    var cfg = notifyCfg_(); if (!cfg.tg || !cfg.budgets || !tgState_().linked) return;
+    var cfg = notifyCfg_(), ch = channels_(); if ((!ch.tg && !ch.push) || !cfg.budgets) return;
     var budgets = (config_().budgets || {}).items || []; if (!budgets.length) return;
     var month = fmtDate_(new Date()).slice(0, 7), touched = {};
     rows.forEach(function (r) { if (fmtDate_(r[0]).slice(0, 7) === month) touched[r[2] + '|' + r[3]] = (touched[r[2] + '|' + r[3]] || 0) + r[1]; });
@@ -1542,8 +1561,192 @@ function budgetAlerts_(rows) {
       var k = (b.action || FIN.EXPENSE) + '|' + b.category, add = touched[k]; if (!add || !(b.limit > 0)) return;
       var now = spent[k] || 0; if (now > b.limit && now - add <= b.limit) msgs.push('⚠️ <b>' + b.category + '</b>: ' + now + ' ' + T.of + ' ' + b.limit);
     });
-    if (msgs.length) tgSend_('💰 <b>' + T.budget + '</b>\n' + msgs.join('\n'));
+    if (msgs.length) notifyAll_('💰 ' + T.budget, stripHtml_(msgs.join('\n')), '💰 <b>' + T.budget + '</b>\n' + msgs.join('\n'), 'budget', true);
   } catch (e) {}
+}
+
+// ───────────────────────────── Уведомления на телефон (Web Push) ─────────────────────────────
+// Сервер Google сам отправляет «толчок» на телефон — уведомление приходит, даже когда приложение закрыто.
+// Ключ VAPID создаётся здесь и хранится только в свойствах скрипта. Подпись ES256 (P-256) — своя реализация на BigInt.
+var P256_ = null;
+function p256_() {
+  if (P256_) return P256_;
+  var B = BigInt, Z = B(0), O = B(1), TW = B(2), TH = B(3);
+  var p = B('0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff');
+  var n = B('0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551');
+  var G = [B('0x6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296'), B('0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5'), O];
+  var mod = function (x, m) { var r = x % m; return r < Z ? r + m : r; };
+  var inv = function (x, m) { var a = mod(x, m), b = m, x0 = O, x1 = Z; while (b !== Z) { var q = a / b, t = a - q * b; a = b; b = t; t = x0 - q * x1; x0 = x1; x1 = t; } return mod(x0, m); };
+  // точки в координатах Якоби [X, Y, Z]; a = −3
+  var dbl = function (P) {
+    if (P[2] === Z || P[1] === Z) return [O, O, Z];
+    var X = P[0], Y = P[1], Zz = P[2], d = mod(Zz * Zz, p), al = mod(TH * (X - d) * (X + d), p), Y2 = mod(Y * Y, p), be = mod(B(4) * X * Y2, p);
+    var X3 = mod(al * al - TW * be, p), Z3 = mod(TW * Y * Zz, p), Y3 = mod(al * (be - X3) - B(8) * Y2 * Y2, p);
+    return [X3, Y3, Z3];
+  };
+  var add = function (P, Q) {
+    if (P[2] === Z) return Q; if (Q[2] === Z) return P;
+    var Z1s = mod(P[2] * P[2], p), Z2s = mod(Q[2] * Q[2], p), U1 = mod(P[0] * Z2s, p), U2 = mod(Q[0] * Z1s, p);
+    var S1 = mod(P[1] * Z2s * Q[2], p), S2 = mod(Q[1] * Z1s * P[2], p);
+    if (U1 === U2) return S1 === S2 ? dbl(P) : [O, O, Z];
+    var H = mod(U2 - U1, p), R = mod(S2 - S1, p), H2 = mod(H * H, p), H3 = mod(H * H2, p), U1H2 = mod(U1 * H2, p);
+    var X3 = mod(R * R - H3 - TW * U1H2, p), Y3 = mod(R * (U1H2 - X3) - S1 * H3, p), Z3 = mod(H * P[2] * Q[2], p);
+    return [X3, Y3, Z3];
+  };
+  var mul = function (k, P) { var R = [O, O, Z], Q = P; while (k > Z) { if (k & O) R = add(R, Q); Q = dbl(Q); k >>= O; } return R; };
+  var affine = function (P) { var zi = inv(P[2], p), zi2 = mod(zi * zi, p); return [mod(P[0] * zi2, p), mod(P[1] * zi2 * zi, p)]; };
+  P256_ = { B: B, n: n, G: G, mod: mod, inv: inv, mul: mul, affine: affine };
+  return P256_;
+}
+var bytesToBig_ = function (b) { var h = '0x'; for (var i = 0; i < b.length; i++) h += ((b[i] & 255) + 256).toString(16).slice(1); return BigInt(h === '0x' ? '0' : h); };
+function bigToBytes_(x, len) { var h = x.toString(16); while (h.length < len * 2) h = '0' + h; var out = []; for (var i = 0; i < len; i++) out.push(parseInt(h.substr(i * 2, 2), 16)); return out; }
+var signedBytes_ = function (a) { return a.map(function (v) { return v > 127 ? v - 256 : v; }); };
+var unsignedBytes_ = function (a) { return a.map(function (v) { return v & 255; }); };
+function b64url_(bytes) { return Utilities.base64EncodeWebSafe(signedBytes_(bytes)).replace(/=+$/, ''); }
+function hmac256_(key, msg) { return unsignedBytes_(Utilities.computeHmacSignature(Utilities.MacAlgorithm.HMAC_SHA_256, signedBytes_(msg), signedBytes_(key))); }
+/** ECDSA P-256 / SHA-256 с детерминированным k (RFC 6979): подпись r‖s, 64 байта. */
+function es256Sign_(msgStr, dHex) {
+  var C = p256_(), B = C.B, n = C.n, d = B('0x' + dHex);
+  var h = unsignedBytes_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, msgStr, Utilities.Charset.UTF_8));
+  var e = C.mod(bytesToBig_(h), n), x = bigToBytes_(d, 32), hb = bigToBytes_(e, 32);
+  var V = [], K = []; for (var i = 0; i < 32; i++) { V.push(1); K.push(0); }
+  K = hmac256_(K, V.concat([0], x, hb)); V = hmac256_(K, V);
+  K = hmac256_(K, V.concat([1], x, hb)); V = hmac256_(K, V);
+  for (var guard = 0; guard < 100; guard++) {
+    V = hmac256_(K, V);
+    var k = bytesToBig_(V);
+    if (k > B(0) && k < n) {
+      var R = C.affine(C.mul(k, C.G)), r = C.mod(R[0], n);
+      if (r !== B(0)) {
+        var s = C.mod(C.inv(k, n) * (e + r * d), n);
+        if (s !== B(0)) { if (s > n / B(2)) s = n - s; return bigToBytes_(r, 32).concat(bigToBytes_(s, 32)); }
+      }
+    }
+    K = hmac256_(K, V.concat([0])); V = hmac256_(K, V);
+  }
+  throw new Error('ES256: не удалось подписать');
+}
+/** Ключ VAPID: создаётся один раз. Открытая часть уходит в приложение для подписки. */
+function vapid_() {
+  var p = PropertiesService.getScriptProperties(), d = p.getProperty('VAPID_D'), pub = p.getProperty('VAPID_PUB');
+  if (d && pub) return { d: d, pub: pub };
+  var C = p256_(), seed = '';
+  for (var i = 0; i < 4; i++) seed += Utilities.getUuid();
+  seed += Date.now() + ':' + Math.random();
+  var x = C.mod(bytesToBig_(unsignedBytes_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, seed, Utilities.Charset.UTF_8))), C.n - C.B(1)) + C.B(1);
+  var P = C.affine(C.mul(x, C.G));
+  d = x.toString(16); pub = b64url_([4].concat(bigToBytes_(P[0], 32), bigToBytes_(P[1], 32)));
+  p.setProperty('VAPID_D', d); p.setProperty('VAPID_PUB', pub);
+  return { d: d, pub: pub };
+}
+function vapidJwt_(aud, sub) {
+  var cache = CacheService.getScriptCache(), ck = 'vapid|' + aud, hit = cache.get(ck); if (hit) return hit;
+  var v = vapid_(), enc = function (o) { return Utilities.base64EncodeWebSafe(JSON.stringify(o), Utilities.Charset.UTF_8).replace(/=+$/, ''); };
+  var head = enc({ typ: 'JWT', alg: 'ES256' }) + '.' + enc({ aud: aud, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: sub || 'mailto:mytracker@example.org' });
+  var jwt = head + '.' + b64url_(es256Sign_(head, v.d));
+  try { cache.put(ck, jwt, 6 * 3600); } catch (e) {}
+  return jwt;
+}
+// подписки телефонов: [{id, ep, pk, origin, ua, at}]
+function pushSubs_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('PUSH_SUBS') || '[]'); } catch (e) { return []; } }
+function savePushSubs_(list) { PropertiesService.getScriptProperties().setProperty('PUSH_SUBS', JSON.stringify(list.slice(-10))); }
+function pushKey_() { return { pub: vapid_().pub, subs: pushSubs_().length }; }
+function pushSub_(req) {
+  var s = req.sub || {}, ep = String(s.endpoint || '');
+  if (!/^https:\/\//.test(ep)) throw new Error('Неверная подписка');
+  var list = pushSubs_().filter(function (x) { return x.ep !== ep && (!req.old || x.ep !== req.old); });
+  var it = { id: Utilities.getUuid().slice(0, 8), ep: ep, pk: Utilities.getUuid().replace(/-/g, ''), origin: String(req.origin || '').slice(0, 200), ua: String(req.ua || '').slice(0, 120), at: Date.now() };
+  list.push(it); savePushSubs_(list);
+  try { installNotifyTriggers_(); } catch (e) {}
+  return { pk: it.pk, id: it.id, subs: list.length };
+}
+function pushUnsub_(req) {
+  var list = pushSubs_().filter(function (x) { return x.pk !== req.pk && x.ep !== req.endpoint; });
+  savePushSubs_(list); try { installNotifyTriggers_(); } catch (e) {}
+  return { subs: list.length };
+}
+/** Отправить уведомление на все подключённые телефоны. Текст ждёт телефон в очереди и забирается им по «толчку». */
+function pushSend_(title, body, tag) {
+  var list = pushSubs_(); if (!list.length) return 0;
+  var props = PropertiesService.getScriptProperties(), pub = vapid_().pub, ok = 0, keep = [], now = Date.now();
+  list.forEach(function (s) {
+    var qk = 'PQ_' + s.id, q = [];
+    try { q = JSON.parse(props.getProperty(qk) || '[]'); } catch (e) {}
+    q = q.filter(function (m) { return now - m.at < 86400000; }); q.push({ t: title, b: body, tag: tag || ('mt' + now), at: now }); q = q.slice(-6);
+    props.setProperty(qk, JSON.stringify(q));
+    var aud = (/^https:\/\/[^\/]+/.exec(s.ep) || [''])[0], code = 0, txt = '';
+    try {
+      var r = UrlFetchApp.fetch(s.ep, { method: 'post', muteHttpExceptions: true,
+        headers: { TTL: '3600', Urgency: 'high', Authorization: 'vapid t=' + vapidJwt_(aud, /^https:\/\//.test(s.origin) ? s.origin : '') + ', k=' + pub } });
+      code = r.getResponseCode(); txt = r.getContentText().slice(0, 200);
+    } catch (e) { txt = String(e && e.message || e).slice(0, 200); }
+    if (code === 404 || code === 410) { props.deleteProperty(qk); return; } // телефон отписался
+    keep.push(s);
+    if (code >= 200 && code < 300) ok++; else props.setProperty('PUSH_ERR', JSON.stringify({ at: now, code: code, text: txt }));
+  });
+  if (keep.length !== list.length) savePushSubs_(keep);
+  if (ok) props.setProperty('PUSH_LAST', String(now));
+  return ok;
+}
+/** Телефон получил «толчок» и забирает свои сообщения (без входа: по ключу подписки). */
+function pushMsg_(req) {
+  var s = pushSubs_().filter(function (x) { return x.pk === String(req.pk || ''); })[0];
+  if (!s) return { items: [], gone: true };
+  var props = PropertiesService.getScriptProperties(), qk = 'PQ_' + s.id, q = [];
+  try { q = JSON.parse(props.getProperty(qk) || '[]'); } catch (e) {}
+  props.deleteProperty(qk);
+  return { items: q.filter(function (m) { return Date.now() - m.at < 6 * 3600000; }).map(function (m) { return { t: m.t, b: m.b, tag: m.tag }; }) };
+}
+function pushTest_() {
+  var en = notifyCfg_().lang === 'en';
+  var n = pushSend_('🧪 myTracker', en ? 'Test: notifications reach this phone even when the app is closed' : 'Тест: уведомления приходят на телефон, даже когда приложение закрыто', 'test');
+  if (!n) { var e = {}; try { e = JSON.parse(PropertiesService.getScriptProperties().getProperty('PUSH_ERR') || '{}'); } catch (x) {} throw new Error('Не удалось отправить на телефон' + (e.code ? ' (код ' + e.code + ')' : '') + '. Включите уведомления заново'); }
+  return { sent: n };
+}
+/** Отправить по всем каналам: Telegram (если подключён и включён) и телефоны. tgHtml — текст с разметкой для Telegram. */
+function notifyAll_(title, body, tgHtml, tag, needTgSwitch) {
+  var cfg = notifyCfg_(), sent = 0;
+  if (tgState_().linked && (!needTgSwitch || cfg.tg)) { try { if (tgSend_(tgHtml || ('<b>' + title + '</b>\n' + body))) sent++; } catch (e) { noteErr_('Telegram: ' + e.message); } }
+  if (cfg.push !== false) { try { sent += pushSend_(title, body, tag); } catch (e) { noteErr_('Телефон: ' + e.message); } }
+  return sent;
+}
+function noteErr_(m) { try { PropertiesService.getScriptProperties().setProperty('NOTIFY_ERR', JSON.stringify({ at: Date.now(), m: String(m).slice(0, 300) })); } catch (e) {} }
+var stripHtml_ = function (s) { return String(s).replace(/<[^>]+>/g, ''); };
+/** Каналы, по которым вообще есть смысл ставить напоминания. */
+function channels_() { var cfg = notifyCfg_(), st = tgState_(); return { tg: st.linked && cfg.tg, push: cfg.push !== false && pushSubs_().length > 0, linked: st.linked }; }
+
+// ── проверка напоминаний для приложения: что не так и почему ничего не приходит
+function notifyDiag_() {
+  var props = PropertiesService.getScriptProperties(), cfg = notifyCfg_(), st = tgState_(), plan = alertPlan_(), sent = {};
+  try { sent = JSON.parse(props.getProperty('ALERTS_SENT') || '{}'); } catch (e) {}
+  var keys = sent.date === plan.date ? sent.keys || [] : [], j = function (k) { try { return JSON.parse(props.getProperty(k) || 'null'); } catch (e) { return null; } };
+  var trig = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); });
+  return {
+    tz: tz_(), scriptTz: Session.getScriptTimeZone(), now: Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd HH:mm'),
+    hasToken: st.hasToken, linked: st.linked, tgOn: !!cfg.tg, push: pushSubs_().length, pushOn: cfg.push !== false,
+    hasTimes: plan.hasTimes, date: plan.date,
+    today: plan.items.map(function (a) { return { k: a.k, at: hhmm_(a.start - cfg.before), sent: keys.indexOf(a.k) >= 0 }; }),
+    triggers: trig, sweep: trig.indexOf('notifySweep') >= 0, nightly: trig.indexOf('nightly') >= 0,
+    lastSweep: Number(props.getProperty('LAST_SWEEP') || 0), lastSent: Number(props.getProperty('LAST_SENT') || 0),
+    err: j('NOTIFY_ERR'), pushErr: j('PUSH_ERR'), pushLast: Number(props.getProperty('PUSH_LAST') || 0)
+  };
+}
+function notifyRepair_() {
+  var n = installNotifyTriggers_();
+  if (!ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'nightly'; }))
+    ScriptApp.newTrigger('nightly').timeBased().atHour(2).everyDays(1).inTimezone(tz_()).create();
+  try { withLock_(sendDueAlerts_); } catch (e) {}
+  var d = notifyDiag_(); d.installed = n; return d;
+}
+
+/** Самопочинка: если проверка раз в 10 минут давно не запускалась — расписание напоминаний ставится заново (не чаще раза в 30 минут). */
+function healNotify_() {
+  try {
+    var c = CacheService.getScriptCache(); if (c.get('heal')) return; c.put('heal', '1', 1800);
+    var ch = channels_(); if (!ch.tg && !ch.push) return;
+    var last = Number(PropertiesService.getScriptProperties().getProperty('LAST_SWEEP') || 0);
+    if (Date.now() - last > 40 * 60000) installNotifyTriggers_();
+  } catch (e) { noteErr_('Самопочинка: ' + e.message); }
 }
 
 // ───────────────────────────── План Корана (для напоминаний в Telegram) ─────────────────────────────
@@ -1645,12 +1848,12 @@ function memoText_(en) {
 function quranRevReminder() {
   var cfg = notifyCfg_(); if (!cfg.qrev || !cfg.qrev.on) return;
   var en = cfg.lang === 'en', txt = revisionText_(en);
-  if (txt) tgSend_('🔁 <b>' + (en ? 'Revision today' : 'Повторение на сегодня') + '</b>\n' + txt);
+  if (txt) notifyAll_('🔁 ' + (en ? 'Revision today' : 'Повторение на сегодня'), txt, '🔁 <b>' + (en ? 'Revision today' : 'Повторение на сегодня') + '</b>\n' + txt, 'qrev');
 }
 function quranMemoReminder() {
   var cfg = notifyCfg_(); if (!cfg.qmemo || !cfg.qmemo.on) return;
   var en = cfg.lang === 'en', txt = memoText_(en);
-  if (txt) tgSend_('📗 <b>' + (en ? 'Memorize today' : 'Выучить сегодня') + '</b>\n' + txt + '\n' + (en ? 'Open the app and tap «✓ Memorized» when done.' : 'Когда выучите — нажмите «✓ Выучил» в приложении.'));
+  if (txt) notifyAll_('📗 ' + (en ? 'Memorize today' : 'Выучить сегодня'), txt, '📗 <b>' + (en ? 'Memorize today' : 'Выучить сегодня') + '</b>\n' + txt + '\n' + (en ? 'Open the app and tap «✓ Memorized» when done.' : 'Когда выучите — нажмите «✓ Выучил» в приложении.'), 'qmemo');
 }
 
 // ───────────────────────────── Загрузка всех данных одним запросом ─────────────────────────────
@@ -1672,6 +1875,7 @@ function readAll_(name, width, dateCol) {
  * (req.ver совпадает) — отвечаем коротко «без изменений», таблицу не читаем.
  */
 function bootstrap_(req) {
+  healNotify_();
   var ver = dataVersion_();
   if (req.ver && String(req.ver) === ver) return { unchanged: true, ver: ver };
   return {
@@ -1709,5 +1913,5 @@ function nightly() {
 
 function installNightly_() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'nightly') ScriptApp.deleteTrigger(t); });
-  ScriptApp.newTrigger('nightly').timeBased().atHour(CFG.NIGHTLY_HOUR).everyDays(1).inTimezone(Session.getScriptTimeZone()).create();
+  ScriptApp.newTrigger('nightly').timeBased().atHour(CFG.NIGHTLY_HOUR).everyDays(1).inTimezone(tz_()).create();
 }

@@ -13,7 +13,7 @@
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="preload" href="fonts/amiri-700.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=6.6">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
   <!-- Вход -->
@@ -58,7 +58,7 @@
           <button type="button" data-p="week">Неделя</button>
           <button type="button" data-p="10d">10 дней</button>
           <button type="button" data-p="month" class="on">Месяц</button>
-          <button type="button" data-p="prev">Прошлый</button>
+          <button type="button" data-p="prev">Прошлый месяц</button>
           <button type="button" data-p="year">Год</button>
           <button type="button" data-p="all">Всё</button>
         </div>
@@ -156,8 +156,13 @@
           </div>
           <div id="fPersonWrap" class="hidden">
             <label class="lbl" id="fPersonLbl">Человек</label>
-            <div id="fPerson" class="chips select"></div>
-            <div id="fPersonNew" class="person-new hidden"><input type="text" maxlength="60" placeholder="Имя человека"><button type="button" class="btn small-btn primary">Выбрать</button></div>
+            <div id="fPersonBox" class="pcombo">
+              <input id="fPersonIn" type="text" maxlength="60" autocomplete="off" enterkeyhint="done" placeholder="Имя или новый человек" aria-labelledby="fPersonLbl" role="combobox" aria-expanded="false" aria-controls="fPersonList">
+              <button id="fPersonClr" class="pc-clear hidden" type="button" aria-label="Очистить">×</button>
+              <span class="pc-arrow" aria-hidden="true">▾</span>
+              <div id="fPersonList" class="pc-list hidden" role="listbox"></div>
+            </div>
+            <p id="fPersonHint" class="muted small hidden"></p>
           </div>
           <div id="fAccWrap" class="hidden">
             <label class="lbl" id="fAccLbl">Счёт / карта</label>
@@ -251,6 +256,7 @@
             <button id="unhideAll" class="btn ghost block" type="button">Показать скрытые снова</button>
           </div>
           <p class="muted small" id="appVersion" style="margin:10px 0 0"></p>
+          <button id="checkUpd" class="btn ghost block" type="button">🔄 Проверить обновление</button>
         </div>
       </details>
 
@@ -358,7 +364,7 @@
             <button id="pmReset" class="btn ghost block" type="button">Начать заново с этой страницы</button>
             <label class="switch-row"><span>Напоминание о заучивании</span><input type="checkbox" class="switch sm" id="pmRemOn"></label>
             <div class="set-row"><span>Время</span><input type="time" id="pmRemTime" class="time-in"></div>
-            <p class="muted small">Напоминания приходят в Telegram (если подключён) и на телефон, пока приложение открыто. В 15 строках — одна страница мусхафа.</p>
+            <p class="muted small">Напоминания приходят в Telegram (если подключён) и на телефон (⚙ → Напоминания). В 15 строках — одна страница мусхафа.</p>
             <button id="plSaveQ" class="btn primary block" type="button">Сохранить план</button>
             <button id="plTestQ" class="btn block" type="button">Отправить план в Telegram (тест)</button>
           </div>
@@ -414,6 +420,7 @@
               <button id="refSave" class="btn primary grow" type="button">Сохранить</button>
             </div>
           </div>
+          <label class="switch-row"><span><b>Своя клавиатура для суммы</b><br><span class="muted small">Цифры и + − × ÷ ( ) на одной клавиатуре — вместо клавиатуры телефона</span></span><input type="checkbox" class="switch sm" data-set="finance.numpad"></label>
           <div class="set-row"><span>Валюта</span><input type="text" data-set="finance.currency" maxlength="6" class="short-in"></div>
           <div class="set-row"><span>Дней в списке</span><select data-set="finance.days" data-num><option>10</option><option>30</option><option>60</option></select></div>
         </div>
@@ -434,9 +441,10 @@
         <div class="set-body">
           <div class="set-group first">
             <div class="lbl">На этом телефоне</div>
-            <label class="switch-row"><span><b>Уведомления о молитвах</b><br><span class="muted small">Когда приложение открыто или свёрнуто недавно. Телефон может не показать их, если приложение давно закрыто — для надёжности подключите Telegram.</span></span><input type="checkbox" class="switch" id="ntLocal"></label>
+            <label class="switch-row"><span><b>Уведомления на этом телефоне</b><br><span class="muted small">Молитвы, платежи, план Корана — приходят с сервера, даже когда приложение закрыто. Android — Chrome; iPhone — приложение с главного экрана (iOS 16.4+).</span></span><input type="checkbox" class="switch" id="ntLocal"></label>
             <p id="ntLocalInfo" class="muted small"></p>
-            <button id="ntLocalTest" class="btn ghost block" type="button">🧪 Тест уведомления на телефоне</button>
+            <div class="row gap"><button id="ntLocalTest" class="btn ghost grow" type="button">🧪 Тест сейчас</button><button id="ntPhoneLater" class="btn ghost grow" type="button">🧪 Через 2 мин</button></div>
+            <p class="muted small">«Через 2 минуты» — закройте приложение полностью: уведомление должно прийти само.</p>
           </div>
           <div class="set-group">
             <div class="lbl">Telegram</div>
@@ -455,6 +463,11 @@
             <label class="switch-row"><span>Превышение лимита (в Telegram)</span><input type="checkbox" class="switch sm" id="ntBudget"></label>
             <button id="ntSave" class="btn primary block" type="button">Сохранить напоминания</button>
           </div>
+          <div class="set-group">
+            <div class="lbl">Не приходят напоминания?</div>
+            <div class="row gap"><button id="ntDiag" class="btn ghost grow" type="button">🔍 Проверить</button><button id="ntRepair" class="btn ghost grow" type="button">🛠 Починить</button></div>
+            <div id="ntDiagOut" class="small"></div>
+          </div>
         </div>
       </details>
 
@@ -463,6 +476,9 @@
         <div class="set-body">
           <div class="set-row"><span>Период при открытии</span>
             <select data-set="dash.period"><option value="last">Последний выбранный</option><option value="10d">10 дней</option><option value="month">Месяц</option><option value="prev">Прошлый месяц</option><option value="year">Год</option><option value="all">Всё время</option></select></div>
+          <div class="lbl">Периоды вверху дашборда</div>
+          <p class="muted small" style="margin:0 0 6px">Оставьте только нужные — лишние скроются (хотя бы один остаётся).</p>
+          <div id="periodChips" class="chips select" style="margin-bottom:12px"></div>
           <div class="lbl">Блоки</div>
           <p class="muted small" style="margin:0 0 6px">Включайте нужные и меняйте порядок стрелками.</p>
           <div id="widgetList"></div>
@@ -479,6 +495,25 @@
 
   <div id="banner" class="banner hidden" role="alert"></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- Своя клавиатура для суммы: цифры и действия калькулятора на одной клавиатуре -->
+  <div id="numpad" class="numpad hidden" aria-label="Клавиатура суммы">
+    <div class="np-top"><span id="npExpr" class="np-expr"></span><span id="npRes" class="np-res"></span></div>
+    <div class="np-keys">
+      <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button><button type="button" data-k="(" class="op">(</button><button type="button" data-k=")" class="op">)</button>
+      <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button><button type="button" data-k="×" class="op" aria-label="Умножить">×</button><button type="button" data-k="÷" class="op" aria-label="Разделить">÷</button>
+      <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button><button type="button" data-k="+" class="op" aria-label="Плюс">+</button><button type="button" data-k="−" class="op" aria-label="Минус">−</button>
+      <button type="button" data-k=",">,</button><button type="button" data-k="0">0</button><button type="button" data-k="back" class="op" aria-label="Стереть">⌫</button><button type="button" data-k="=" class="op eq" aria-label="Посчитать">=</button><button type="button" data-k="done" class="done" aria-label="Готово">✓</button>
+    </div>
+  </div>
+
+  <!-- Финансы: подробности -->
+  <div id="finSheet" class="sheet hidden" role="dialog" aria-modal="true" aria-labelledby="fsTitle">
+    <div class="sheet-panel">
+      <div class="sheet-head"><h2 id="fsTitle">Финансы</h2><button id="fsClose" class="icon-btn" type="button" aria-label="Закрыть">×</button></div>
+      <div id="fsBody"></div>
+    </div>
+  </div>
 
   <!-- Мусхаф -->
   <div id="mushaf" class="mushaf hidden" role="dialog" aria-modal="true" aria-label="Мусхаф">
@@ -502,8 +537,8 @@
     </div>
   </div>
 
-  <script src="config.js?v=6.6"></script>
-  <script src="i18n.js?v=6.6"></script>
-  <script src="app.js?v=6.6"></script>
+  <script src="config.js?v=7"></script>
+  <script src="i18n.js?v=7"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

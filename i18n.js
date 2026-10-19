@@ -506,6 +506,56 @@
   pat(/^✓ Прочитал: (.+)$/, (m, a) => '✓ I read: ' + a.replace(/стр\. /g, 'p. '));
   pat(/^Записано ✓ (.+)$/, 'Saved ✓ $1');
 
+  // ── 6.7: подробности финансов, столбцы, периоды, уведомления на телефон, проверка напоминаний
+  add({
+    'Приход и расход': 'Income and expenses', 'Оба': 'Both', 'По дням': 'By day', 'По неделям': 'By week', 'По месяцам': 'By month', 'Дни': 'Days', 'Недели': 'Weeks', 'Месяцы': 'Months',
+    'Нет записей': 'No entries', 'Откуда': 'Where from', 'По категориям': 'By category', 'Расходы по категориям': 'Expenses by category', 'Приход по категориям': 'Income by category',
+    'По счетам': 'By account', 'Записи': 'Entries', 'Начальный остаток': 'Starting balance', 'На начало периода': 'At period start', '＋ Приход': '＋ Income', '− Расход': '− Expenses', 'Сейчас': 'Now',
+    'Показать весь дашборд только по этой карте': 'Show the whole dashboard for this card only', 'Показать дашборд по всем счетам': 'Show the dashboard for all accounts',
+    'записей без счёта не входят в остатки по счетам': 'entries without an account are not in account balances', 'Нет записей за период': 'No entries in this period',
+    'Финансы: столбцы по дням, неделям, месяцам': 'Finance: bars by day, week, month', 'Периоды вверху дашборда': 'Periods at the top of the dashboard',
+    'Оставьте только нужные — лишние скроются (хотя бы один остаётся).': 'Keep only the ones you need — the rest are hidden (at least one stays).', 'Хотя бы один период должен остаться': 'At least one period must stay',
+    'Прошлый месяц': 'Last month', 'Показать все': 'Show all',
+    'Уведомления на этом телефоне': 'Notifications on this phone',
+    'Молитвы, платежи, план Корана — приходят с сервера, даже когда приложение закрыто. Android — Chrome; iPhone — приложение с главного экрана (iOS 16.4+).': 'Prayers, payments, Quran plan — sent by the server, even when the app is closed. Android — Chrome; iPhone — the app from the Home Screen (iOS 16.4+).',
+    '🧪 Тест сейчас': '🧪 Test now', '🧪 Через 2 минуты': '🧪 In 2 minutes', '«Через 2 минуты» — закройте приложение полностью: уведомление должно прийти само.': '«In 2 minutes» — close the app completely: the notification should arrive by itself.',
+    'Не приходят напоминания?': 'Reminders not arriving?', '🔍 Проверить': '🔍 Check', '🛠 Починить': '🛠 Repair',
+    '✅ Уведомления приходят с сервера — даже когда приложение закрыто.': '✅ Notifications come from the server — even when the app is closed.',
+    'Сейчас — только пока приложение открыто. Выключите и включите снова, чтобы уведомления приходили и при закрытом приложении.': 'Right now only while the app is open. Turn it off and on again to get notifications when the app is closed too.',
+    'Этот браузер умеет показывать уведомления только пока приложение открыто — для фона подключите Telegram.': 'This browser can show notifications only while the app is open — connect Telegram for background reminders.',
+    'Уведомления включены ✓ Они будут приходить, даже когда приложение закрыто': 'Notifications on ✓ They will arrive even when the app is closed',
+    'Отправлено с сервера — уведомление должно появиться через несколько секунд': 'Sent from the server — the notification should appear in a few seconds',
+    'Пока уведомления работают только при открытом приложении. Включите переключатель заново, чтобы они приходили и в фоне': 'For now notifications only work while the app is open. Turn the switch on again to get them in the background',
+    'Токен бота (TG_TOKEN) добавлен': 'Bot token (TG_TOKEN) added', 'Telegram подключён': 'Telegram connected', 'Напоминания в Telegram включены': 'Telegram reminders on',
+    'Время молитв на сегодня есть': 'Prayer times for today found', 'Проверка раз в 10 минут установлена': 'Check every 10 minutes installed', 'Ночное обновление установлено': 'Nightly update installed',
+    'Apps Script → Настройки проекта → Свойства скрипта → TG_TOKEN.': 'Apps Script → Project settings → Script properties → TG_TOKEN.', 'Напишите боту /start и нажмите «Подключить».': 'Send /start to your bot and tap «Connect».',
+    'Включите переключатель «Напоминания в Telegram» и нажмите «Сохранить напоминания».': 'Turn on «Telegram reminders» and tap «Save reminders».', 'Включите «Уведомления на этом телефоне» выше.': 'Turn on «Notifications on this phone» above.',
+    'Пояса не совпадают — напоминания приходили бы не в то время. Нажмите «Починить».': 'Time zones differ — reminders would come at the wrong time. Tap «Repair».',
+    'В листе «Времена молитв» нет строки на сегодня — добавьте времена на этот месяц.': 'The «Prayer times» sheet has no row for today — add this month’s times.',
+    'Нажмите «Починить».': 'Tap «Repair».', 'Сначала подключите Telegram или уведомления на телефоне.': 'First connect Telegram or phone notifications.',
+    'Google давно не запускал проверку. Нажмите «Починить»; если не поможет — в Apps Script запустите authorize и разрешите доступ.': 'Google has not run the check for a while. Tap «Repair»; if that does not help, run authorize in Apps Script and allow access.',
+    'Время на сервере': 'Server time', 'Последняя проверка': 'Last check', 'Последнее напоминание о молитве': 'Last prayer reminder', 'телефона': 'phone', 'Телефон': 'Phone', 'код': 'code',
+    'ни разу': 'never', 'только что': 'just now', 'мин назад': 'min ago', 'ч назад': 'h ago', 'Сегодня': 'Today', 'Создать': 'Create', '🔄 Проверить обновление': '🔄 Check for update', 'Доступно обновление — нажмите, чтобы обновить': 'Update available — tap to update',
+    'Нет связи — проверить обновление не получилось': 'No connection — could not check for updates', 'Сумма': 'Amount', 'Своя клавиатура для суммы': 'Built-in keypad for amounts', 'Цифры и + − × ÷ ( ) на одной клавиатуре — вместо клавиатуры телефона': 'Digits and + − × ÷ ( ) on one keypad — instead of the phone keyboard',
+    '🧪 Через 2 мин': '🧪 In 2 min', 'Напоминания приходят в Telegram (если подключён) и на телефон (⚙ → Напоминания). В 15 строках — одна страница мусхафа.': 'Reminders come via Telegram (if connected) and to the phone (⚙ → Reminders). 15 lines = one mushaf page.', 'Имя или новый человек': 'Name or a new person', 'Выберите из списка': 'Choose from the list',
+    'Введите имя, чтобы добавить человека': 'Type a name to add a person', 'Новый человек — сохранится вместе с записью': 'New person — saved together with the entry', 'Очистить': 'Clear'
+  });
+  pat(/^Человек «(.+)» добавлен — сохранится вместе с записью$/, 'Person «$1» added — saved together with the entry');
+  pat(/^Расход ([\d\s ,.]+)$/, 'Expenses $1');
+  pat(/^Приход ([\d\s ,.]+)$/, 'Income $1');
+  pat(/^в среднем ([\d\s ,.]+) в день$/, 'avg $1 per day');
+  pat(/^в среднем ([\d\s ,.]+) в неделю$/, 'avg $1 per week');
+  pat(/^в среднем ([\d\s ,.]+) в месяц$/, 'avg $1 per month');
+  pat(/^(\d+) записей$/, '$1 entries');
+  pat(/^Показать все \((\d+)\)$/, 'Show all ($1)');
+  pat(/^Показаны последние (\d+)$/, 'Showing the last $1');
+  pat(/^Телефоны с уведомлениями: (\d+)$/, 'Phones with notifications: $1');
+  pat(/^Часовой пояс сервера: (.+)$/, (m, a) => 'Server time zone: ' + a.replace('телефона', 'phone'));
+  pat(/^Тест придёт около (.+)\. Закройте приложение полностью и подождите$/, 'The test will arrive around $1. Close the app completely and wait');
+  pat(/^Расписание поставлено заново ✓ Напоминаний на сегодня: (\d+)$/, 'Schedule re-created ✓ Reminders today: $1');
+
+  pat(/^Установлена последняя версия (.+) ✓$/, 'You have the latest version $1 ✓');
+  pat(/^Приложение обновлено до версии (.+) ✓$/, 'App updated to version $1 ✓');
   window.I18N = { lang, tr, add, pat, start };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 })();
