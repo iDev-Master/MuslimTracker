@@ -12,6 +12,7 @@
  */
 
 // ───────────────────────────── Настройки ─────────────────────────────
+var SERVER_BUILD = 12;         // растёт с каждым исправлением сервера; приложение проверяет его
 var APP_VERSION = 6;            // должна совпадать с APP_VERSION в app.js
 
 var CFG = {
@@ -39,7 +40,7 @@ var HEAD = {
   PRAYERS: ['Дата', 'Фаджр', 'Духа', 'Зухр', 'Аср', 'Магриб', 'Иша', 'Витр', 'Комментарий', 'Обновлено'],
   READING: ['ID', 'Дата', 'Вид', 'Тип', 'С стр.', 'По стр.', 'Страниц', 'Повторов', 'Итого стр.',
             '№ суры', 'Сура', 'Аятов', 'Итого аятов', 'Комментарий', 'Создано'],
-  FINANCE: ['ID', 'Дата', 'Сумма', 'Действие', 'Категория', 'Комментарий', 'Создано', 'Поток ±', 'Счёт', 'На счёт'],
+  FINANCE: ['ID', 'Дата', 'Сумма', 'Действие', 'Категория', 'Комментарий', 'Создано', 'Поток ±', 'Счёт', 'На счёт', 'Человек'],
   RECUR: ['ID', 'Название', 'Сумма', 'Действие', 'Категория', 'Счёт', 'Повтор', 'Каждые', 'Следующая дата',
           'Авто', 'Напомнить за (дн.)', 'Активен', 'Комментарий', 'День'],
   CONFIG: ['Ключ', 'Значение (JSON)', 'Описание'],
@@ -603,11 +604,13 @@ function doPost(e) {
       addFinance: addFinance_, updateFinance: updateFinance_, saveFinanceRef: saveFinanceRef_,
       saveAccounts: saveAccounts_, updateBlankAccounts: updateBlankAccounts_,
       saveConfig: saveConfig_, saveStatuses: saveStatuses_, saveRecurring: saveRecurring_, skipRecurring: skipRecurring_,
-      importCsv: importCsv_, tgState: tgStatus_, tgTestLater: tgTestLater_, tgLink: tgLink_, tgTest: tgTest_, tgUnlink: tgUnlink_
+      deleteReading: deleteReading_, deleteFinance: deleteFinance_, revertRecurring: revertRecurring_,
+      savePeople: savePeople_, assignPerson: assignPerson_,
+      importCsv: importCsv_, tgState: tgStatus_, tgTestLater: tgTestLater_, tgQuranTest: tgQuranTest_, tgLink: tgLink_, tgTest: tgTest_, tgUnlink: tgUnlink_
     };
     var fn = routes[req.action];
-    if (!fn) return json_({ ok: false, error: 'Неизвестное действие', v: APP_VERSION });
-    var isWrite = /^(add|update|save|skip|import)/.test(req.action);
+    if (!fn) return json_({ ok: false, error: 'OLD_SERVER', message: 'Apps Script устарел: замените Code.gs и сделайте новое развертывание (Развертывания → Управление → ✏ → Новая версия).', v: APP_VERSION, b: SERVER_BUILD });
+    var isWrite = /^(add|update|save|skip|import|delete|revert|assign)/.test(req.action);
     // повтор той же операции из офлайн-очереди (ответ потерялся в сети) не создаёт дубликат
     var cache = CacheService.getScriptCache(), opKey = req.opId ? 'op|' + req.opId : null;
     if (isWrite && opKey) { var done = cache.get(opKey); if (done) return json_({ ok: true, data: JSON.parse(done), v: APP_VERSION, repeated: true }); }
@@ -616,13 +619,14 @@ function doPost(e) {
       bumpVersion_();
       if (opKey) try { cache.put(opKey, JSON.stringify(data || {}), 21600); } catch (e2) {}
     }
-    return json_({ ok: true, data: data, v: APP_VERSION });
+    return json_({ ok: true, data: data, v: APP_VERSION, b: SERVER_BUILD });
   } catch (err) {
     return json_({ ok: false, error: String(err && err.message || err), v: APP_VERSION });
   }
 }
 
 function json_(obj) {
+  if (obj && obj.v) obj.b = SERVER_BUILD;
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -670,7 +674,14 @@ function ss_() {
 }
 function sheet_(name) {
   var sh = ss_().getSheetByName(name);
-  if (!sh) throw new Error('Нет листа «' + name + '». Запустите setup()');
+  // листы, добавленные в новых версиях, создаём сами, если setup() ещё не запускали
+  if (!sh && (name === SH.CONFIG || name === SH.RECUR || name === SH.ACCOUNTS)) {
+    sh = ss_().insertSheet(name);
+    var head = name === SH.CONFIG ? HEAD.CONFIG : name === SH.RECUR ? HEAD.RECUR : HEAD.ACCOUNTS;
+    sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold').setBackground('#263238').setFontColor('#ffffff');
+    sh.setFrozenRows(1);
+  }
+  if (!sh) throw new Error('Нет листа «' + name + '». Запустите setup() в редакторе Apps Script');
   return sh;
 }
 function tz_() { return Session.getScriptTimeZone(); }
@@ -871,7 +882,8 @@ function financeRow_(it) {
     if (account === to) throw new Error('Счета перевода должны различаться');
     if (!category) category = FIN.BETWEEN;
   } else to = '';
-  return [parseDate_(it.date), Math.round(amount * 100) / 100, action, category, clean_(it.comment), account, to];
+  var person = action === FIN.DEBT ? clean_(it.person, 60) : '';
+  return [parseDate_(it.date), Math.round(amount * 100) / 100, action, category, clean_(it.comment), account, to, person];
 }
 
 /** Пачка записей: { items: [{opId, date, amount, actionType, category, comment}, ...] } */
@@ -883,14 +895,15 @@ function addFinance_(req) {
   var rows = items.map(financeRow_); // проверяем все до записи
   return withLock_(function () {
     var sh = sheet_(SH.FINANCE), id = nextId_(sh), now = new Date(), ids = [], map = flowMap_();
-    var data = rows.map(function (r) { ids.push(id); return [id++].concat(r.slice(0, 5), [now, signed_(map, r[2], r[3], r[1]), r[5], r[6]]); });
+    var byOp = {};
+    var data = rows.map(function (r, i) { ids.push(id); if (items[i].opId) byOp[items[i].opId] = id; return [id++].concat(r.slice(0, 5), [now, signed_(map, r[2], r[3], r[1]), r[5], r[6], r[7]]); });
     sh.getRange(sh.getLastRow() + 1, 1, data.length, data[0].length).setValues(data);
     items.forEach(function (it) {
       if (it.opId) try { cache.put('op|' + it.opId, '1', 21600); } catch (e) {}
       if (it.recurId && it.recurDue) try { advanceRecurring_(it.recurId, String(it.recurDue)); } catch (e) {}
     });
     budgetAlerts_(rows);
-    return { ids: ids };
+    return { ids: ids, byOp: byOp };
   });
 }
 
@@ -900,8 +913,72 @@ function updateFinance_(req) {
     var sh = sheet_(SH.FINANCE), r = findRowById_(sh, req.id);
     if (r < 0) throw new Error('Запись не найдена (возможно, удалена в таблице)');
     sh.getRange(r, 2, 1, 5).setValues([row.slice(0, 5)]);
-    sh.getRange(r, 8, 1, 3).setValues([[signed_(flowMap_(), row[2], row[3], row[1]), row[5], row[6]]]);
+    sh.getRange(r, 8, 1, 4).setValues([[signed_(flowMap_(), row[2], row[3], row[1]), row[5], row[6], row[7]]]);
     return { id: Number(req.id) };
+  });
+}
+
+// ── Люди (долги): список в «Настройках», имя — в колонке «Человек» листа «Финансы»
+/** { items: [{name, orig, note, archived}] } — сохранить список; переименованные — переименовать и в записях. */
+function savePeople_(req) {
+  var items = (req.items || []).map(function (x) { return { name: clean_(x.name, 60), orig: clean_(x.orig, 60), note: clean_(x.note, 200), archived: !!x.archived }; })
+    .filter(function (x) { return x.name; });
+  var names = items.map(function (x) { return x.name.toLowerCase(); });
+  if (names.filter(function (n, i) { return names.indexOf(n) !== i; }).length) throw new Error('Имена не должны повторяться');
+  var ren = {};
+  items.forEach(function (x) { if (x.orig && x.orig !== x.name) ren[x.orig] = x.name; });
+  var renamed = 0;
+  withLock_(function () {
+    setConfig_('people', { items: items.map(function (x) { return { name: x.name, note: x.note, archived: x.archived }; }) });
+    if (Object.keys(ren).length) {
+      var sh = sheet_(SH.FINANCE), last = sh.getLastRow();
+      if (last > 1) {
+        var rng = sh.getRange(2, 11, last - 1, 1), v = rng.getValues();
+        v.forEach(function (r) { var n = String(r[0]).trim(); if (ren[n]) { r[0] = ren[n]; renamed++; } });
+        if (renamed) rng.setValues(v);
+      }
+    }
+  });
+  return { config: config_(), renamed: renamed };
+}
+/** Привязать к человеку старые долги без имени: { person, comment } — по точному комментарию, или { person, ids: [..] }. */
+function assignPerson_(req) {
+  var person = clean_(req.person, 60); if (!person) throw new Error('Укажите человека');
+  var key = String(req.comment || '').trim().toLowerCase(), ids = (req.ids || []).map(String);
+  return withLock_(function () {
+    var sh = sheet_(SH.FINANCE), last = sh.getLastRow(), n = 0;
+    if (last < 2) return { updated: 0 };
+    var v = sh.getRange(2, 1, last - 1, 11).getValues(), col = v.map(function (r) { return [r[10]]; });
+    v.forEach(function (r, i) {
+      if (String(r[3]).trim() !== FIN.DEBT || String(r[10]).trim()) return;
+      var hit = ids.length ? ids.indexOf(String(r[0])) >= 0 : key && String(r[5]).trim().toLowerCase() === key;
+      if (hit) { col[i][0] = person; n++; }
+    });
+    if (n) sh.getRange(2, 11, col.length, 1).setValues(col);
+    return { updated: n };
+  });
+}
+
+// ── Отмена (undo): удаление только что добавленной записи
+function deleteRow_(name, id) {
+  return withLock_(function () {
+    var sh = sheet_(name), r = findRowById_(sh, id);
+    if (r < 0) return { deleted: false };
+    sh.deleteRow(r);
+    return { deleted: true, id: Number(id) };
+  });
+}
+function deleteReading_(req) { return deleteRow_(SH.READING, req.id); }
+function deleteFinance_(req) { return deleteRow_(SH.FINANCE, req.id); }
+/** Отмена оплаты или пропуска регулярного платежа: вернуть «Следующую дату» на due. */
+function revertRecurring_(req) {
+  return withLock_(function () {
+    var sh = sheet_(SH.RECUR), r = findRowById_(sh, req.id), due = String(req.due || '');
+    if (r < 0 || !/^\d{4}-\d{2}-\d{2}$/.test(due)) return { reverted: false };
+    var rec = recurring_().filter(function (x) { return x.id === Number(req.id); })[0];
+    if (!rec || rec.next !== advance_(due, rec.repeat, rec.every, rec.day)) return { reverted: false };
+    sh.getRange(r, 9).setValue(parseDate_(due));
+    return { reverted: true };
   });
 }
 
@@ -935,9 +1012,10 @@ function addReading_(req) {
   var rows = readingRows_(req);
   return withLock_(function () {
     var sh = sheet_(SH.READING), id = nextId_(sh);
-    rows.forEach(function (r) { r[0] = id++; });
+    var ids = [];
+    rows.forEach(function (r) { ids.push(id); r[0] = id++; });
     sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-    return { added: rows.length };
+    return { added: rows.length, ids: ids };
   });
 }
 
@@ -1004,7 +1082,9 @@ var CONFIG_KEYS = {
   budgets: 'Месячные лимиты по категориям',
   goals: 'Цели',
   notify: 'Напоминания (Telegram)',
-  hifz: 'Хифз: заучено ранее (суры, страницы, дата)'
+  hifz: 'Хифз: заучено ранее (суры, страницы, дата)',
+  people: 'Люди (для долгов)',
+  plan: 'План Корана: повторение и заучивание'
 };
 function config_() {
   var sh = ss_().getSheetByName(SH.CONFIG), out = {};
@@ -1162,7 +1242,7 @@ function processRecurring_() {
       while (due <= t && guard++ < 60) {
         var tr = rec.action === FIN.TRANSFER;
         rows.push([id++, parseDate_(due), rec.amount, rec.action, rec.category || (tr ? FIN.BETWEEN : ''),
-                   '↻ ' + rec.name + (rec.comment ? ': ' + rec.comment : ''), now, signed_(map, rec.action, rec.category, rec.amount), rec.account, '']);
+                   '↻ ' + rec.name + (rec.comment ? ': ' + rec.comment : ''), now, signed_(map, rec.action, rec.category, rec.amount), rec.account, '', '']);
         due = advance_(due, rec.repeat, rec.every, rec.day);
       }
       var r = findRowById_(rs, rec.id); if (r > 0) rs.getRange(r, 9).setValue(parseDate_(due));
@@ -1194,7 +1274,7 @@ function importCsv_(req) {
         if (!d || !(amt > 0) || !act) { skipped++; return; }
         if ((r[0] !== '' && ids[String(r[0])]) || keys[key(d, amt, act, cat, com)]) { skipped++; return; }
         keys[key(d, amt, act, cat, com)] = 1;
-        out.push([id++, d, amt, act, cat, com, now, signed_(map, act, cat, amt), clean_(r[8], 60), act === FIN.TRANSFER ? clean_(r[9], 60) : '']);
+        out.push([id++, d, amt, act, cat, com, now, signed_(map, act, cat, amt), clean_(r[8], 60), act === FIN.TRANSFER ? clean_(r[9], 60) : '', act === FIN.DEBT ? clean_(r[10], 60) : '']);
       });
       if (out.length) sh.getRange(sh.getLastRow() + 1, 1, out.length, out[0].length).setValues(out);
       added = out.length;
@@ -1252,7 +1332,7 @@ function notifyCfg_() {
   var n = config_().notify || {};
   return { tg: !!n.tg, lang: n.lang === 'en' ? 'en' : 'ru', prayers: n.prayers || { fajr: true, zuhr: true, asr: true, maghrib: true, isha: true },
            before: Math.max(0, Number(n.before) || 0), payments: n.payments !== false, hour: Math.min(23, Math.max(0, Number(n.hour == null ? 8 : n.hour))),
-           budgets: n.budgets !== false };
+           budgets: n.budgets !== false, qrev: n.qrev || null, qmemo: n.qmemo || null };
 }
 /**
  * Запустите один раз из редактора (▶ authorize), чтобы Google спросил разрешение
@@ -1308,6 +1388,11 @@ function tgLink_() {
   try { installNotifyTriggers_(); } catch (e) {}
   return tgStatus_();
 }
+function tgQuranTest_() {
+  var en = notifyCfg_().lang === 'en', r = revisionText_(en), m = memoText_(en);
+  if (!tgSend_('🧪 ' + (en ? 'Quran plan' : 'План Корана') + '\n\n🔁 ' + (r || (en ? 'No revision plan' : 'Плана повторения нет')) + '\n\n📗 ' + (m || (en ? 'No memorization task' : 'Задания на заучивание нет')))) throw new Error('Не удалось отправить. Подключите Telegram заново');
+  return { ok: true };
+}
 function tgTest_() { if (!tgSend_(TG_TEXT_[notifyCfg_().lang].test)) throw new Error('Не удалось отправить. Подключите Telegram заново'); return tgStatus_(); }
 function tgUnlink_() { PropertiesService.getScriptProperties().deleteProperty('TG_CHAT'); try { installNotifyTriggers_(); } catch (e) {} return tgStatus_(); }
 
@@ -1325,10 +1410,17 @@ function prayerStarts_(dateStr) {
 function installNotifyTriggers_() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     var h = t.getHandlerFunction();
-    if (h === 'prayerAlert' || h === 'paymentReminder' || h === 'notifySweep') ScriptApp.deleteTrigger(t);
+    if (h === 'prayerAlert' || h === 'paymentReminder' || h === 'notifySweep' || h === 'quranRevReminder' || h === 'quranMemoReminder') ScriptApp.deleteTrigger(t);
   });
   var cfg = notifyCfg_(), st = tgState_(), props = PropertiesService.getScriptProperties();
-  if (!cfg.tg || !st.linked) { props.deleteProperty('ALERTS'); return 0; }
+  if (!st.linked) { props.deleteProperty('ALERTS'); return 0; }
+  // напоминания о повторении и заучивании Корана в выбранное время (включаются отдельно, в ⚙ → Коран)
+  [['qrev', 'quranRevReminder'], ['qmemo', 'quranMemoReminder']].forEach(function (x) {
+    var q = cfg[x[0]]; if (!q || !q.on) return;
+    var m = /^(\d{1,2}):(\d{2})$/.exec(q.time || ''), hh = m ? Number(m[1]) : 6, mm = m ? Number(m[2]) : 0;
+    ScriptApp.newTrigger(x[1]).timeBased().atHour(hh).nearMinute(mm).everyDays(1).inTimezone(tz_()).create();
+  });
+  if (!cfg.tg) { props.deleteProperty('ALERTS'); return 0; }
   ScriptApp.newTrigger('paymentReminder').timeBased().atHour(cfg.hour).everyDays(1).inTimezone(tz_()).create();
   // подстраховка: раз в 10 минут проверяем, не пропущено ли напоминание (и ставим расписание, если ночью не поставилось)
   ScriptApp.newTrigger('notifySweep').timeBased().everyMinutes(10).create();
@@ -1454,6 +1546,113 @@ function budgetAlerts_(rows) {
   } catch (e) {}
 }
 
+// ───────────────────────────── План Корана (для напоминаний в Telegram) ─────────────────────────────
+// Та же логика, что в приложении: повторяются страницы, которые дольше всех не повторяли.
+var SURA_PAGE_ = [1, 2, 50, 77, 106, 128, 151, 177, 187, 208, 221, 235, 249, 255, 262, 267, 282, 293, 305, 312, 322, 332, 342, 350, 359, 367, 377, 385, 396, 404,
+  411, 415, 418, 428, 434, 440, 446, 453, 458, 467, 477, 483, 489, 496, 499, 502, 507, 511, 515, 518, 520, 523, 526, 528, 531, 534, 537, 542, 545, 549,
+  551, 553, 554, 556, 558, 560, 562, 564, 566, 568, 570, 572, 574, 575, 577, 578, 580, 582, 583, 585, 586, 587, 587, 589, 590, 591, 591, 592, 593, 594,
+  595, 595, 596, 596, 597, 597, 598, 598, 599, 599, 600, 600, 601, 601, 601, 602, 602, 602, 603, 603, 603, 604, 604, 604];
+var JUZ_START_ = [1, 22, 42, 62, 82, 102, 121, 142, 162, 182, 201, 222, 242, 262, 282, 302, 322, 342, 362, 382, 402, 422, 442, 462, 482, 502, 522, 542, 562, 582];
+var LINES_ = 15;
+function suraPages_(n) { var a = SURA_PAGE_[n - 1], nx = n < 114 ? SURA_PAGE_[n] : 605; return [a, Math.max(a, nx - 1)]; }
+function juzOf_(p) { var j = 1; JUZ_START_.forEach(function (s, i) { if (p >= s) j = i + 1; }); return j; }
+function juzPages_(j) { return [JUZ_START_[j - 1], j < 30 ? JUZ_START_[j] - 1 : 604]; }
+function planCfg_() {
+  var c = config_().plan || {};
+  var rev = { method: 'cycle', days: 10, amount: 1, unit: 'juz', recent: 20, oldDays: 7 }, memo = { on: false, amount: 5, unit: 'lines', order: 'forward', start: 1, pos: null, lastDone: '', lastTask: '' };
+  Object.keys(c.rev || {}).forEach(function (k) { rev[k] = c.rev[k]; });
+  Object.keys(c.memo || {}).forEach(function (k) { memo[k] = c.memo[k]; });
+  return { rev: rev, memo: memo };
+}
+/** Заученные страницы, дата последнего повторения (до сегодня) и дата заучивания. */
+function quranState_() {
+  var kinds = refValues_(REFC.KIND).map(function (r) { return String(r[0]); }), KM = kinds[1] || 'Заучивание', KR = kinds[2] || 'Повторение';
+  var t = fmtDate_(new Date()), mem = {}, prev = {}, memDate = {}, todayRev = {}, h = config_().hifz || {};
+  var addRange = function (a, b, fn) { for (var p = Math.max(1, a); p <= Math.min(604, b); p++) fn(p); };
+  String(h.pages || '').split(/[,;\s]+/).forEach(function (part) {
+    var m = /^(\d{1,3})(?:[-–](\d{1,3}))?$/.exec(part.trim()); if (!m) return;
+    addRange(Number(m[1]), Number(m[2] || m[1]), function (p) { mem[p] = 1; if (h.date) prev[p] = h.date; });
+  });
+  (h.suras || []).forEach(function (n) { var r = suraPages_(n); addRange(r[0], r[1], function (p) { mem[p] = 1; if (h.date) prev[p] = h.date; }); });
+  readAll_(SH.READING, 14, 1).forEach(function (r) {
+    if (r[2] !== KM && r[2] !== KR) return;
+    var a = r[4] !== '' ? Number(r[4]) : null, b = r[5] !== '' ? Number(r[5]) : null;
+    if (a == null && r[9] !== '') { var sp = suraPages_(Number(r[9])); a = sp[0]; b = sp[1]; }
+    if (a == null) return;
+    addRange(a, b, function (p) {
+      if (r[2] === KM) { mem[p] = 1; if (!memDate[p] || r[1] > memDate[p]) memDate[p] = r[1]; }
+      if (r[1] < t && (!prev[p] || r[1] > prev[p])) prev[p] = r[1];
+      if (r[1] === t && r[2] === KR) todayRev[p] = 1;
+    });
+  });
+  return { mem: Object.keys(mem).map(Number).sort(function (x, y) { return x - y; }), prev: prev, memDate: memDate, todayRev: todayRev, today: t };
+}
+function pageRanges_(list) {
+  var s = list.slice().sort(function (a, b) { return a - b; }), out = [];
+  s.forEach(function (p) { var r = out[out.length - 1]; if (r && p === r[1] + 1) r[1] = p; else if (!r || p !== r[1]) out.push([p, p]); });
+  return out;
+}
+function rangeText_(r, en) {
+  var ja = juzOf_(r[0]), jb = juzOf_(r[1]), full = juzPages_(ja)[0] === r[0] && juzPages_(jb)[1] === r[1];
+  var pages = (en ? 'p. ' : 'стр. ') + (r[0] === r[1] ? r[0] : r[0] + '–' + r[1]);
+  return full ? (en ? 'Juz ' : 'Джуз ') + (ja === jb ? ja : ja + '–' + jb) + ' (' + pages + ')' : pages;
+}
+/** Текст задания на повторение на сегодня. */
+function revisionText_(en) {
+  var P = planCfg_().rev, memo = planCfg_().memo; if (P.method === 'off') return '';
+  var S = quranState_(), mem = S.mem.filter(function (p) { return !(S.memDate[p] === S.today && !S.prev[p]); });
+  if (!mem.length) return '';
+  var oldest = function (list, k) {
+    return list.slice().sort(function (a, b) { var x = S.prev[a] || '', y = S.prev[b] || ''; return x < y ? -1 : x > y ? 1 : a - b; }).slice(0, Math.max(0, k));
+  };
+  var k = 0, recent = [], portion = [];
+  if (P.method === 'cycle') k = Math.ceil(mem.length / Math.max(1, P.days));
+  else if (P.method === 'fixed') k = P.unit === 'juz' ? Math.round(P.amount * 20) : Math.round(P.amount);
+  else if (P.method === 'ratio') k = memo.unit === 'pages' ? memo.amount * LINES_ : memo.amount;
+  if (P.method === 'sabqi') {
+    recent = mem.slice().sort(function (a, b) { var x = S.memDate[a] || '', y = S.memDate[b] || ''; return x > y ? -1 : x < y ? 1 : b - a; }).slice(0, P.recent);
+    var rest = mem.filter(function (p) { return recent.indexOf(p) < 0; });
+    portion = oldest(rest, Math.ceil(rest.length / Math.max(1, P.oldDays)));
+  } else portion = oldest(mem, Math.min(k, mem.length));
+  // уже повторённое сегодня (например, прочитали заранее) в напоминание не включаем
+  recent = recent.filter(function (p) { return !S.todayRev[p]; }); portion = portion.filter(function (p) { return !S.todayRev[p]; });
+  if (!recent.length && !portion.length) return '';
+  var parts = [];
+  if (recent.length) parts.push((en ? 'Sabqi: ' : 'Сабки: ') + pageRanges_(recent).map(function (r) { return rangeText_(r, en); }).join(', '));
+  if (portion.length) parts.push((recent.length ? (en ? 'Manzil: ' : 'Манзил: ') : '') + pageRanges_(portion).map(function (r) { return rangeText_(r, en); }).join(', '));
+  return parts.join('\n') + '\n' + (en ? 'Total: ' : 'Всего: ') + (recent.length + portion.length) + (en ? ' p.' : ' стр.');
+}
+/** Текст задания на заучивание на сегодня. */
+function memoText_(en) {
+  var M = planCfg_().memo; if (!M.on) return '';
+  var S = quranState_(), t = S.today, memSet = {}; S.mem.forEach(function (p) { memSet[p] = 1; });
+  if (M.lastDone === t) return '';
+  var seq = [];
+  if (M.order === 'juz-back') { for (var j = 30; j >= 1; j--) { var jp = juzPages_(j); for (var q = jp[0]; q <= jp[1]; q++) seq.push(q); } }
+  else for (var q2 = 1; q2 <= 604; q2++) seq.push(q2);
+  var pos = M.pos && M.pos.p ? { p: M.pos.p, l: M.pos.l } : { p: Number(M.start) || seq[0], l: 1 }, i = seq.indexOf(pos.p), guard = 0;
+  while (pos.l === 1 && memSet[pos.p] && guard++ < 604) { i++; if (i >= seq.length) return ''; pos = { p: seq[i], l: 1 }; }
+  var left = M.unit === 'pages' ? M.amount * LINES_ : M.amount, p = pos.p, l = pos.l, parts = [];
+  guard = 0;
+  while (left > 0 && p && guard++ < 700) {
+    var take = Math.min(left, LINES_ - l + 1);
+    parts.push(l === 1 && take === LINES_ ? (en ? 'p. ' : 'стр. ') + p : (en ? 'p. ' + p + ', lines ' : 'стр. ' + p + ', строки ') + l + '–' + (l + take - 1));
+    left -= take; l += take;
+    if (l > LINES_) { i++; p = i < seq.length ? seq[i] : null; l = 1; while (p && memSet[p] && i < seq.length - 1) { i++; p = seq[i]; } }
+  }
+  return parts.join(' · ');
+}
+function quranRevReminder() {
+  var cfg = notifyCfg_(); if (!cfg.qrev || !cfg.qrev.on) return;
+  var en = cfg.lang === 'en', txt = revisionText_(en);
+  if (txt) tgSend_('🔁 <b>' + (en ? 'Revision today' : 'Повторение на сегодня') + '</b>\n' + txt);
+}
+function quranMemoReminder() {
+  var cfg = notifyCfg_(); if (!cfg.qmemo || !cfg.qmemo.on) return;
+  var en = cfg.lang === 'en', txt = memoText_(en);
+  if (txt) tgSend_('📗 <b>' + (en ? 'Memorize today' : 'Выучить сегодня') + '</b>\n' + txt + '\n' + (en ? 'Open the app and tap «✓ Memorized» when done.' : 'Когда выучите — нажмите «✓ Выучил» в приложении.'));
+}
+
 // ───────────────────────────── Загрузка всех данных одним запросом ─────────────────────────────
 // Версия данных меняется при каждой записи и при ручной правке таблицы.
 function dataVersion_() { return PropertiesService.getScriptProperties().getProperty('DATA_VER') || '0'; }
@@ -1482,7 +1681,7 @@ function bootstrap_(req) {
     data: {
       prayers: readAll_(SH.PRAYERS, 2 + PRAYER_KEYS.length, 0),   // дата, 7 статусов, комментарий
       reading: readAll_(SH.READING, 14, 1),
-      finance: readAll_(SH.FINANCE, 10, 1)   // … 8 = счёт, 9 = на счёт
+      finance: readAll_(SH.FINANCE, 11, 1)   // … 8 = счёт, 9 = на счёт, 10 = человек (для долгов)
     }
   };
 }

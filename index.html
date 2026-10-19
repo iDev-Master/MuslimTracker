@@ -13,7 +13,7 @@
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="preload" href="fonts/amiri-700.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=6.6">
 </head>
 <body>
   <!-- Вход -->
@@ -34,6 +34,9 @@
       <div class="top-actions">
         <button id="openSettings" class="icon-btn" title="Настройки" aria-label="Настройки">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        <button id="topUndo" class="icon-btn hidden" title="Отменить" aria-label="Отменить">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
         </button>
         <button id="topSave" class="icon-btn save-btn" title="Сохранить" aria-label="Сохранить">
           <svg class="i-save" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
@@ -65,9 +68,9 @@
       <!-- Молитвы -->
       <section id="tab-prayers" class="tab">
         <div class="date-nav">
-          <button class="icon-btn" data-shift="-1" aria-label="Предыдущий день">‹</button>
-          <input type="date" id="pDate">
-          <button class="icon-btn" data-shift="1" aria-label="Следующий день">›</button>
+          <button class="icon-btn" type="button" data-dshift="-1" data-for="pDate" aria-label="Предыдущий день">‹</button>
+          <label class="date-field"><span class="date-text"></span><input type="date" id="pDate" aria-label="Дата"></label>
+          <button class="icon-btn" type="button" data-dshift="1" data-for="pDate" aria-label="Следующий день">›</button>
         </div>
         <button id="nowTile" class="now-tile" type="button"></button>
         <p id="pState" class="muted small center"></p>
@@ -85,10 +88,15 @@
 
       <!-- Коран -->
       <section id="tab-quran" class="tab hidden">
+        <div class="date-nav">
+          <button class="icon-btn" type="button" data-dshift="-1" data-for="rDate" aria-label="Предыдущий день">‹</button>
+          <label class="date-field"><span class="date-text"></span><input type="date" id="rDate" aria-label="Дата"></label>
+          <button class="icon-btn" type="button" data-dshift="1" data-for="rDate" aria-label="Следующий день">›</button>
+        </div>
+        <button id="mOpenBtn" class="btn block m-open" type="button">📖 Мусхаф</button>
+        <div id="planBox" class="card plan-box hidden"></div>
         <div id="rEdit" class="edit-banner hidden"><span></span><button type="button" class="link">Отмена</button></div>
         <div class="card">
-          <label class="lbl" for="rDate">Дата</label>
-          <input type="date" id="rDate">
           <label class="lbl">Вид</label>
           <div id="rKind" class="seg"></div>
           <label class="lbl">Что читал</label>
@@ -125,11 +133,19 @@
 
       <!-- Финансы -->
       <section id="tab-finance" class="tab hidden">
+        <div class="date-nav">
+          <button class="icon-btn" type="button" data-dshift="-1" data-for="fDate" aria-label="Предыдущий день">‹</button>
+          <label class="date-field"><span class="date-text"></span><input type="date" id="fDate" aria-label="Дата"></label>
+          <button class="icon-btn" type="button" data-dshift="1" data-for="fDate" aria-label="Следующий день">›</button>
+        </div>
         <div id="recurBox" class="card recur-box hidden"></div>
         <div id="fEdit" class="edit-banner hidden"><span></span><button type="button" class="link">Отмена</button></div>
         <div class="card">
           <label class="lbl" for="fAmount" id="fAmountLbl">Сумма (с)</label>
           <input id="fAmount" type="text" inputmode="decimal" placeholder="150 или 27+110" class="big">
+          <div id="fKeys" class="calc-keys" aria-label="Калькулятор">
+            <button type="button" data-k="+" aria-label="Плюс">+</button><button type="button" data-k="−" aria-label="Минус">−</button><button type="button" data-k="×" aria-label="Умножить">×</button><button type="button" data-k="÷" aria-label="Разделить">÷</button><button type="button" data-k="(">(</button><button type="button" data-k=")">)</button><button type="button" data-k="back" aria-label="Стереть">⌫</button><button type="button" data-k="=" class="eq" aria-label="Посчитать">=</button>
+          </div>
           <p id="fCalc" class="muted small"></p>
           <label class="lbl">Действие</label>
           <div id="fAction" class="seg wrap"></div>
@@ -137,6 +153,11 @@
             <label class="lbl">Категория</label>
             <div id="fCategory" class="chips select"></div>
             <div id="fBudget" class="budget-hint hidden"></div>
+          </div>
+          <div id="fPersonWrap" class="hidden">
+            <label class="lbl" id="fPersonLbl">Человек</label>
+            <div id="fPerson" class="chips select"></div>
+            <div id="fPersonNew" class="person-new hidden"><input type="text" maxlength="60" placeholder="Имя человека"><button type="button" class="btn small-btn primary">Выбрать</button></div>
           </div>
           <div id="fAccWrap" class="hidden">
             <label class="lbl" id="fAccLbl">Счёт / карта</label>
@@ -146,8 +167,6 @@
             <label class="lbl">Куда</label>
             <div id="fTo" class="chips select"></div>
           </div>
-          <label class="lbl" for="fDate">Дата</label>
-          <input type="date" id="fDate">
           <label class="lbl" for="fComment">Комментарий</label>
           <textarea id="fComment" rows="1" maxlength="1000" placeholder="На что / кому"></textarea>
         </div>
@@ -162,6 +181,7 @@
           <p class="hint-swipe">Хранятся на телефоне до отправки кнопкой ➤ вверху или автоматически · Свайп влево — убрать</p>
         </div>
 
+        <div id="debtBox" class="card debt-box hidden"></div>
         <h2 id="fRecentTitle">Последние 10 дней</h2>
         <div id="fRecent" class="list"></div>
         <p class="hint-swipe">Нажмите на запись, чтобы изменить · Свайп влево — скрыть</p>
@@ -197,12 +217,26 @@
           </label>
           <div class="set-row"><span>Тема</span>
             <select data-set="theme"><option value="auto">Как в телефоне</option><option value="light">Светлая</option><option value="dark">Тёмная</option></select></div>
+          <div class="set-row"><span>Формат даты</span>
+            <select data-set="dateFmt"><option value="dmy">17.10.2026</option><option value="dmy-">17-10-2026</option><option value="mdy">10/17/2026</option><option value="ymd">2026-10-17</option><option value="long">17 окт. 2026</option></select></div>
           <div class="set-row"><span>Вкладка при запуске</span>
             <select data-set="startTab"><option value="last">Последняя открытая</option><option value="prayers">Молитвы</option><option value="dash">Дашборды</option><option value="quran">Коран</option><option value="finance">Финансы</option></select></div>
           <div class="set-group">
             <div class="lbl">Данные</div>
             <p id="syncInfo" class="small" style="margin:0 0 8px"></p>
             <button id="forceSync" class="btn ghost block" type="button">Загрузить всё заново с сервера</button>
+          </div>
+          <div class="set-group">
+            <div class="lbl">Отмена действий ↶</div>
+            <p class="muted small">Кнопка ↶ вверху отменяет последнее действие. После добавления, изменения или скрытия записи внизу на 5 секунд появляется «Отменить».</p>
+            <div class="lbl" style="margin:0">Что можно отменять</div>
+            <label class="switch-row"><span>Отметки молитв</span><input type="checkbox" class="switch sm" data-set="undo.prayers"></label>
+            <label class="switch-row"><span>Записи Корана</span><input type="checkbox" class="switch sm" data-set="undo.quran"></label>
+            <label class="switch-row"><span>Записи финансов и платежи</span><input type="checkbox" class="switch sm" data-set="undo.finance"></label>
+            <label class="switch-row"><span>Скрытие из списка (свайп)</span><input type="checkbox" class="switch sm" data-set="undo.hide"></label>
+            <div class="set-row"><span>Сколько хранить историю</span><select data-set="undo.keep" data-num><option value="10">10 минут</option><option value="60">1 час</option><option value="0">До конца дня</option><option value="1440">24 часа</option><option value="10080">7 дней</option></select></div>
+            <label class="switch-row"><span><b>Только на текущей вкладке</b><br><span class="muted small">На «Молитвах» ↶ не отменит запись «Корана» и наоборот</span></span><input type="checkbox" class="switch sm" data-set="undo.tabOnly"></label>
+            <button id="undoClear" class="btn ghost block" type="button">Очистить историю отмены</button>
           </div>
           <div class="set-group">
             <div class="lbl">Экспорт и импорт CSV</div>
@@ -270,8 +304,64 @@
             <p id="hzInfo" class="muted small"></p>
             <button id="hzSave" class="btn primary block" type="button">Сохранить заученное</button>
           </div>
-          <div class="set-row"><span>Зелёный — повторено за (дней)</span><select data-set="quran.fresh" data-num><option>3</option><option>7</option><option>14</option><option>30</option></select></div>
-          <div class="set-row"><span>Бледнеет после (дней)</span><select data-set="quran.stale" data-num><option>14</option><option>30</option><option>60</option><option>90</option></select></div>
+          <div class="set-group">
+            <div class="lbl">Цвета карты хифза</div>
+            <div class="set-row"><span>Ярко-зелёный, если повторено не позже (дней)</span><input type="number" inputmode="numeric" min="1" max="59" class="short-in" data-set="quran.fresh" data-num></div>
+            <div class="set-row"><span>Жёлтый «давно» — после (дней, не больше 60)</span><input type="number" inputmode="numeric" min="2" max="60" class="short-in" data-set="quran.stale" data-num></div>
+          </div>
+          <div class="set-group" id="mushafSettings">
+            <div class="lbl">Мусхаф</div>
+            <div class="set-row"><span>Вид</span><select id="msKind">
+              <option value="v4">Мадинский 1441 (точный)</option>
+              <option value="text">Шрифт «Усмани»</option></select></div>
+            <div class="set-row" data-ms="v4 v4-std v4-alt v4-off v4-custom"><span>Таджвид</span><select id="msTj">
+              <option value="std">Цветной</option>
+              <option value="alt">Цветной — другие оттенки</option>
+              <option value="off">Без таджвида</option>
+              <option value="custom">Свои цвета</option></select></div>
+            <div id="msColors" class="tj-colors" data-ms="v4-custom"></div>
+            <p class="muted small" data-ms="v4">Страницы и строки — как в печатном мусхафе Комплекса короля Фахда (15 строк), шрифты KFGQPC.</p>
+            <div class="set-row" data-ms="text"><span>Размер шрифта <b id="msSizeV">100%</b></span><input type="range" id="msSize" min="70" max="220" step="10"></div>
+            <label class="switch-row" data-ms="text"><span>Сохранять строки мусхафа<br><span class="muted small">Выключите, чтобы крупный текст переносился по ширине экрана</span></span><input type="checkbox" class="switch sm" id="msKeep"></label>
+            <label class="switch-row"><span><b>Засчитывать страницы сами</b><br><span class="muted small">Страница, открытая дольше заданного времени, записывается как прочитанная. На странице задания на повторение — как «Повторение»; при заучивании не засчитывается</span></span><input type="checkbox" class="switch sm" data-set="mushaf.auto"></label>
+            <div class="set-row"><span>Через сколько секунд (не меньше 45)</span><input type="number" inputmode="numeric" min="45" max="900" class="short-in" data-set="mushaf.secs" data-num></div>
+            <div class="set-row"><span>Записывать как</span><select data-set="mushaf.autoKind" data-options="kinds" data-idx></select></div>
+            <p id="msDlInfo" class="small"></p>
+            <div class="row gap"><button id="msDl" class="btn grow" type="button">Скачать весь Коран</button><button id="msDel" class="btn ghost hidden" type="button">Удалить</button></div>
+            <button id="msOpen" class="btn ghost block" type="button">📖 Открыть мусхаф</button>
+            <p class="muted small">Шрифты © Комплекс короля Фахда (KFGQPC), через QUL / Tarteel. Разметка строк — QUL; текст «Усмани» — quran-text (quran.ws), CC BY 4.0.</p>
+          </div>
+          <div class="set-group" id="planSettings">
+            <div class="lbl">План повторения (мураджаа)</div>
+            <p class="muted small">Приложение само скажет, что повторить сегодня: берутся заученные страницы, которые дольше всех не повторялись. Прочитали заранее — завтрашнее задание сдвинется само.</p>
+            <div class="set-row"><span>Методика</span><select id="pqMethod">
+              <option value="cycle">Всё заученное за N дней</option>
+              <option value="fixed">Фиксированный объём в день</option>
+              <option value="ratio">По объёму заучивания (1 строка → 1 стр.)</option>
+              <option value="sabqi">Сабак · Сабки · Манзил</option>
+              <option value="off">Без плана</option></select></div>
+            <div class="set-row" data-pq="cycle"><span>За сколько дней круг</span><input type="number" id="pqDays" min="1" max="60" class="short-in" inputmode="numeric"></div>
+            <div class="set-row" data-pq="fixed"><span>Сколько в день</span><span class="row gap"><input type="text" id="pqAmount" class="short-in" inputmode="decimal"><select id="pqUnit"><option value="juz">джуз</option><option value="pages">стр.</option></select></span></div>
+            <div class="set-row" data-pq="sabqi"><span>Сабки: последние выученные (стр., каждый день)</span><input type="number" id="pqRecent" min="1" max="100" class="short-in" inputmode="numeric"></div>
+            <div class="set-row" data-pq="sabqi"><span>Манзил: остальное за (дней)</span><input type="number" id="pqOldDays" min="1" max="60" class="short-in" inputmode="numeric"></div>
+            <p id="pqInfo" class="muted small"></p>
+            <label class="switch-row"><span>Напоминание о повторении</span><input type="checkbox" class="switch sm" id="pqRemOn"></label>
+            <div class="set-row"><span>Время</span><input type="time" id="pqRemTime" class="time-in"></div>
+          </div>
+          <div class="set-group">
+            <div class="lbl">План заучивания (сабак)</div>
+            <label class="switch-row"><span><b>Задание на заучивание каждый день</b><br><span class="muted small">«✓ Выучил» — завтра дальше; «Ещё не выучил» — то же задание, пока не выучите</span></span><input type="checkbox" class="switch sm" id="pmOn"></label>
+            <div class="set-row"><span>Сколько в день</span><span class="row gap"><input type="number" id="pmAmount" min="1" class="short-in" inputmode="numeric"><select id="pmUnit"><option value="lines">строк</option><option value="pages">страниц</option></select></span></div>
+            <div class="set-row"><span>Порядок</span><select id="pmOrder"><option value="forward">С начала мусхафа</option><option value="juz-back">С 30-го джуза назад</option></select></div>
+            <div class="set-row"><span>Начать со страницы</span><input type="number" id="pmStart" min="1" max="604" class="short-in" inputmode="numeric"></div>
+            <p id="pmPos" class="small"></p>
+            <button id="pmReset" class="btn ghost block" type="button">Начать заново с этой страницы</button>
+            <label class="switch-row"><span>Напоминание о заучивании</span><input type="checkbox" class="switch sm" id="pmRemOn"></label>
+            <div class="set-row"><span>Время</span><input type="time" id="pmRemTime" class="time-in"></div>
+            <p class="muted small">Напоминания приходят в Telegram (если подключён) и на телефон, пока приложение открыто. В 15 строках — одна страница мусхафа.</p>
+            <button id="plSaveQ" class="btn primary block" type="button">Сохранить план</button>
+            <button id="plTestQ" class="btn block" type="button">Отправить план в Telegram (тест)</button>
+          </div>
         </div>
       </details>
 
@@ -289,6 +379,14 @@
               <button id="accReset" class="btn ghost grow" type="button">Отменить</button>
               <button id="accSave" class="btn primary grow" type="button">Сохранить счета</button>
             </div>
+          </div>
+          <div class="set-group">
+            <div class="lbl">Люди (для долгов)</div>
+            <p class="muted small">С кем у вас долги. Человека можно добавить и прямо в форме долга. При переименовании старые записи тоже переименуются. 📦 — убрать из выбора, долги останутся.</p>
+            <div id="plEditor"></div>
+            <button id="plAdd" class="btn ghost block" type="button">＋ Добавить человека</button>
+            <button id="plSave" class="btn primary block" type="button">Сохранить людей</button>
+            <div id="plLegacy" class="set-group"></div>
           </div>
           <div class="set-group">
             <div class="lbl">Регулярные платежи</div>
@@ -382,8 +480,30 @@
   <div id="banner" class="banner hidden" role="alert"></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="config.js?v=6"></script>
-  <script src="i18n.js?v=6"></script>
-  <script src="app.js?v=6"></script>
+  <!-- Мусхаф -->
+  <div id="mushaf" class="mushaf hidden" role="dialog" aria-modal="true" aria-label="Мусхаф">
+    <div class="m-top">
+      <button id="mClose" class="icon-btn" type="button" aria-label="Закрыть">✕</button>
+      <div class="m-title"><b id="mSura" data-noi18n></b><span id="mInfo" class="muted small"></span></div>
+      <button id="mTj" class="icon-btn" type="button" aria-label="Вид и таджвид">🎨</button>
+    </div>
+    <div id="mLegend" class="m-panel hidden"></div>
+    <div id="mGo" class="m-panel hidden">
+      <div class="row gap"><input type="number" id="mGoPage" min="1" max="604" inputmode="numeric" class="short-in" aria-label="Страница"><button id="mGoBtn" class="btn primary" type="button">Перейти</button></div>
+      <div class="row gap"><select id="mGoSura" class="grow" aria-label="Сура"></select><select id="mGoJuz" aria-label="Джуз"></select></div>
+    </div>
+    <div id="mTask" class="m-task hidden"></div>
+    <div id="mPageWrap" class="m-wrap"><div id="mPage" class="m-page"></div></div>
+    <div id="mAct" class="m-act"></div>
+    <div class="m-bottom">
+      <button id="mNext" class="icon-btn" type="button" aria-label="Следующая страница">‹</button>
+      <button id="mPgBtn" class="m-pg" type="button" aria-label="Перейти к странице"><b id="mPgNum">1</b></button>
+      <button id="mPrev" class="icon-btn" type="button" aria-label="Предыдущая страница">›</button>
+    </div>
+  </div>
+
+  <script src="config.js?v=6.6"></script>
+  <script src="i18n.js?v=6.6"></script>
+  <script src="app.js?v=6.6"></script>
 </body>
 </html>

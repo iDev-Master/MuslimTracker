@@ -87,7 +87,7 @@
     // общее
     'Молитвы': 'Prayers', 'Коран': 'Quran', 'Финансы': 'Finance', 'Дашборды': 'Dashboards', 'Дашборд': 'Dashboard',
     'Настройки': 'Settings', 'Выйти': 'Log out', 'Войти': 'Log in', 'Пароль': 'Password', 'Закрыть': 'Close',
-    'Сохранить': 'Save', 'Отмена': 'Cancel', 'Отменить': 'Cancel', 'Удалить': 'Delete', 'Изменить': 'Edit', 'Проверить': 'Test',
+    'Сохранить': 'Save', 'Отмена': 'Cancel', 'Отменить': 'Cancel', 'Удалить': 'Delete', 'Шрифты © Комплекс короля Фахда (KFGQPC), через QUL / Tarteel. Разметка строк — QUL; текст «Усмани» — quran-text (quran.ws), CC BY 4.0.': 'Fonts © King Fahd Complex (KFGQPC), via QUL / Tarteel. Line layout — QUL; «Uthmani» text — quran-text (quran.ws), CC BY 4.0.', 'Изменить': 'Edit', 'Проверить': 'Test',
     'Подключить': 'Connect', 'Переподключить': 'Reconnect', 'Скрыть': 'Hide', 'Убрать': 'Remove', 'Выше': 'Up', 'Ниже': 'Down',
     'Молитвы · Коран · Финансы': 'Prayers · Quran · Finance', 'Язык / Language': 'Language',
     'Дата': 'Date', 'Комментарий': 'Comment', 'Необязательно': 'Optional', 'Сумма': 'Amount', 'Действие': 'Action', 'Категория': 'Category',
@@ -248,6 +248,28 @@
     'Период блока': 'Block period', 'Период: как на дашборде': 'Period: as on the dashboard',
     'Цели показываются на дашборде в блоке «Цели»: прогресс за день, неделю, месяц или год и сколько осталось.': 'Goals appear on the dashboard in the «Goals» block: progress for the day, week, month or year and how much is left.',
     'Сохранить цели': 'Save goals',
+    'Калькулятор': 'Calculator', 'Плюс': 'Plus', 'Минус': 'Minus', 'Умножить': 'Multiply', 'Разделить': 'Divide', 'Стереть': 'Delete', 'Посчитать': 'Calculate', 'Не получается посчитать — проверьте выражение': 'Cannot calculate — check the expression', '150 или 27+110': '150 or 27+110',
+    'Человек': 'Person', 'Какой долг гасите': 'Which debt are you repaying', 'Кто вернул': 'Who returned', 'Кому дали': 'Lent to', 'У кого взяли': 'Borrowed from',
+    'Открытых долгов нет': 'No open debts', 'Открытых долгов нет.': 'No open debts.', 'Вам никто не должен': 'Nobody owes you', '＋ Новый человек': '＋ New person', 'Имя человека': 'Person name',
+    'Выбрать': 'Select', 'Выберите человека': 'Choose a person', 'Долги': 'Debts', 'Все люди': 'All people', 'Все записи долгов': 'All debt records', 'Записей долгов нет': 'No debt records',
+    'из комментария': 'from comment', 'Имя взято из комментария': 'Name taken from the comment', 'Переплата': 'Overpaid', 'Долги по людям': 'Debts by person',
+    'Люди (для долгов)': 'People (for debts)', '＋ Добавить человека': '＋ Add person', 'Сохранить людей': 'Save people', 'Люди сохранены ✓': 'People saved ✓', 'Имя': 'Name',
+    'Заметка: телефон, кто это': 'Note: phone, who it is', 'Старые долги без имени': 'Old debts without a name', 'людей': 'people',
+    'С кем у вас долги. Человека можно добавить и прямо в форме долга. При переименовании старые записи тоже переименуются. 📦 — убрать из выбора, долги останутся.': 'People you have debts with. You can also add a person right in the debt form. Renaming also renames old records. 📦 — remove from the choice; debts stay.',
+    'Сейчас имя берётся из комментария. Нажмите, чтобы закрепить его за человеком в таблице.': 'For now the name is taken from the comment. Tap to save it as the person in the sheet.',
+    'Людей пока нет. Их можно добавить здесь или прямо в форме долга.': 'No people yet. Add them here or right in the debt form.', 'Без имени': 'No name',
+    'Формат даты': 'Date format', 'Сегодня': 'Today', 'Вчера': 'Yesterday', 'Имена не должны повторяться': 'Names must be unique', 'Укажите человека': 'Choose a person',
+    'Отменить': 'Undo', 'Нечего отменять': 'Nothing to undo', 'Отмена действий ↶': 'Undo ↶', 'Что можно отменять': 'What can be undone',
+    'Кнопка ↶ вверху отменяет последнее действие. После добавления, изменения или скрытия записи внизу на 5 секунд появляется «Отменить».': 'The ↶ button at the top undoes the last action. After adding, editing or hiding a record, «Undo» appears at the bottom for 5 seconds.',
+    'Отметки молитв': 'Prayer marks', 'Записи Корана': 'Quran records', 'Записи финансов и платежи': 'Finance records and payments', 'Скрытие из списка (свайп)': 'Hiding from the list (swipe)',
+    'Сколько хранить историю': 'Keep history for', '10 минут': '10 minutes', '1 час': '1 hour', 'До конца дня': 'Until end of day', '24 часа': '24 hours',
+    'Только на текущей вкладке': 'Current tab only', 'На «Молитвах» ↶ не отменит запись «Корана» и наоборот': 'On «Prayers» ↶ will not undo a «Quran» record and vice versa',
+    'Очистить историю отмены': 'Clear undo history', 'История отмены очищена': 'Undo history cleared', 'Отмечено ✓': 'Marked ✓',
+    'Не удалось отменить: запись уже обработана. Измените её вручную': 'Could not undo: the record was already processed. Change it manually',
+    'Изменение записи Корана': 'Quran record edit', 'Удаление неотправленной записи': 'Deleting an unsent record', 'Скрытие записи из списка': 'Hiding a record',
+    'Удаление записи из списка': 'Removing a record from the list', 'Изменение записи в списке': 'Editing a record in the list',
+    'Apps Script устарел: замените Code.gs и сделайте новое развертывание (Развертывания → Управление → ✏ → Новая версия).': 'Apps Script is outdated: replace Code.gs and create a new deployment (Deploy → Manage deployments → ✏ → New version).',
+    'Apps Script устарел: замените': 'Apps Script is outdated: replace', 'и сделайте': 'and do',
     'По страницам': 'By page', 'По сурам': 'By surah', 'Частично': 'Partly', 'Заучена': 'Memorized', 'Не заучена': 'Not memorized',
     'Нажмите на клетку — появятся сура, страницы и когда вы её читали и повторяли.': 'Tap a cell to see the surah, pages and when you read and revised it.',
     'Повторений пока не было': 'No revisions yet', 'Отмечено как заученное ранее': 'Marked as memorized earlier', 'Последний раз': 'Last time',
@@ -276,6 +298,19 @@
   const RU_MON = '';
   // шаблоны с числами и именами
   pat(/^Последние (\d+) дней$/, 'Last $1 days');
+  pat(/^Я должен (.+)$/, 'I owe $1');
+  pat(/^Мне должны (.+)$/, 'Owed to me $1');
+  pat(/^Долги: (.+)$/, 'Debts: $1');
+  pat(/^Закрыто долгов: (\d+)$/, 'Closed debts: $1');
+  pat(/^И ещё: (\d+)$/, 'And $1 more');
+  pat(/^Человек «(.+)» выбран — сохранится вместе с записью$/, 'Person «$1» selected — saved with the record');
+  pat(/^Отменено: (.+)$/, (m, x) => 'Undone: ' + tr(x));
+  pat(/^Отменить: (.+)$/, (m, x) => 'Undo: ' + tr(x));
+  pat(/^Изменение записи №(\d+)$/, 'Edit of record #$1');
+  pat(/^Скрытие дня (.+)$/, 'Hiding day $1');
+  pat(/^Оплата «(.+)»$/, 'Payment «$1»');
+  pat(/^Пропуск «(.+)»$/, 'Skip «$1»');
+  pat(/^Отмечены остальные · (.+)$/, 'Rest marked · $1');
   pat(/^Страница (\d+)$/, 'Page $1');
   pat(/^Стр\. (\d+) · (\d+) аятов$/, 'Page $1 · $2 ayahs');
   pat(/^Сура: (.+)$/, 'Surah: $1');
@@ -392,6 +427,84 @@
   pat(/^Перевод на (.+)$/, 'Transfer to $1');
   pat(/^Изменения: (.+)$/, 'Changes: $1');
   pat(/^(.+): (\d+) стр\.$/, '$1: $2 p.');
+
+  // ── План Корана
+  add({
+    'План на сегодня': 'Plan for today', 'Настроить': 'Set up', '🔁 Повторение': '🔁 Revision', '📗 Заучивание': '📗 Memorization',
+    'Пока нечего повторять: отметьте заученное в ⚙ → Коран или добавьте запись «Заучивание».': 'Nothing to revise yet: mark what you know in ⚙ → Quran or add a «Memorization» entry.',
+    '🔁 Повторить сегодня': '🔁 Revise today', '📗 Выучить сегодня': '📗 Memorize today', 'Сабки:': 'Sabqi:', 'Манзил:': 'Manzil:', 'Сабки': 'Sabqi', 'Манзил': 'Manzil',
+    '✓ На сегодня всё повторено': '✓ All revised for today', '✓ Повторил': '✓ Revised', '✓ Повторил всё': '✓ Revised all', '✓ Выучил': '✓ Memorized', 'Ещё не выучил': 'Not yet',
+    'Весь Коран по плану выучен. Машаллах!': 'The whole plan is memorized. MashaAllah!', 'Завтра — следующая часть.': 'Tomorrow — the next part.',
+    'Хорошо — завтра будет то же самое задание. Повторяйте, пока не выучите': 'OK — tomorrow you get the same task. Keep repeating until you know it',
+    'Выучено ✓ Завтра — дальше': 'Memorized ✓ Tomorrow — next part', 'Повторение отмечено ✓': 'Revision marked ✓', 'План сохранён ✓': 'Plan saved ✓', 'Позиция сброшена': 'Position reset',
+    'Отправлено в Telegram ✓': 'Sent to Telegram ✓', 'Нужен интернет': 'Internet connection needed',
+    'Повторение на сегодня': 'Revision today', 'Выучить сегодня': 'Memorize today',
+    'Цвета карты хифза': 'Hifz map colours', 'Ярко-зелёный, если повторено не позже (дней)': 'Bright green if revised within (days)', 'Жёлтый «давно» — после (дней, не больше 60)': 'Yellow «long ago» after (days, max 60)',
+    'План повторения (мураджаа)': 'Revision plan (muraja‘a)',
+    'Приложение само скажет, что повторить сегодня: берутся заученные страницы, которые дольше всех не повторялись. Прочитали заранее — завтрашнее задание сдвинется само.': 'The app tells you what to revise today: the memorized pages that have gone longest without revision. Read ahead — tomorrow’s task shifts by itself.',
+    'Методика': 'Method', 'Всё заученное за N дней': 'Everything memorized in N days', 'Фиксированный объём в день': 'Fixed amount per day', 'По объёму заучивания (1 строка → 1 стр.)': 'By memorization volume (1 line → 1 page)',
+    'Сабак · Сабки · Манзил': 'Sabaq · Sabqi · Manzil', 'Без плана': 'No plan', 'За сколько дней круг': 'Days per full cycle', 'Сколько в день': 'Per day', 'джуз': 'juz',
+    'Сабки: последние выученные (стр., каждый день)': 'Sabqi: latest memorized (pages, every day)', 'Манзил: остальное за (дней)': 'Manzil: the rest within (days)',
+    'Напоминание о повторении': 'Revision reminder', 'Напоминание о заучивании': 'Memorization reminder', 'Время': 'Time',
+    'План заучивания (сабак)': 'Memorization plan (sabaq)', 'Задание на заучивание каждый день': 'Daily memorization task',
+    '«✓ Выучил» — завтра дальше; «Ещё не выучил» — то же задание, пока не выучите': '«✓ Memorized» — move on tomorrow; «Not yet» — same task until you know it',
+    'строк': 'lines', 'страниц': 'pages', 'Порядок': 'Order', 'С начала мусхафа': 'From the start', 'С 30-го джуза назад': 'Juz 30 backwards',
+    'Начать со страницы': 'Start from page', 'Начать заново с этой страницы': 'Restart from this page', 'Начнём с начала выбранного порядка': 'We start from the beginning of the chosen order',
+    'Напоминания приходят в Telegram (если подключён) и на телефон, пока приложение открыто. В 15 строках — одна страница мусхафа.': 'Reminders come via Telegram (if connected) and to the phone while the app is open. 15 lines = one mushaf page.',
+    'Сохранить план': 'Save plan', 'Отправить план в Telegram (тест)': 'Send plan to Telegram (test)', 'План заучивания': 'Memorization plan', 'План повторения': 'Revision plan',
+    'Сабак — новое, Сабки — недавно выученное (каждый день), Манзил — всё остальное по кругу.': 'Sabaq — new, Sabqi — recently memorized (every day), Manzil — everything else in rotation.',
+    'Начать заучивание заново с выбранной страницы? Уже выученное не пропадёт.': 'Restart memorization from the chosen page? What you already know is kept.',
+    'План Корана': 'Quran plan', 'План на день': 'Daily plan'
+  });
+  // перечни страниц и джузов: «стр. 3–5, Джуз 30 (стр. 582–604)», «стр. 12, строки 1–5 · стр. 13»
+  const qPages = (x) => x.replace(/Джузы (\d+)–(\d+)/g, 'Juz $1–$2').replace(/Джуз (\d+)/g, 'Juz $1').replace(/стр\. (\d+)/g, 'p. $1').replace(/строки (\d+)–(\d+)/g, 'lines $1–$2');
+  pat(/^(?:(?:стр\. \d+(?:–\d+)?(?:, строки \d+–\d+)?|Джузы? \d+(?:–\d+)? \(стр\. \d+(?:–\d+)?\))(?:, | · )?)+$/, (m) => qPages(m));
+  pat(/^Сабки: (\d+) последних стр\. каждый день$/, 'Sabqi: last $1 p. every day');
+  pat(/^Манзил: остальное за (\d+) дн\.$/, 'Manzil: the rest in $1 days');
+  pat(/^(Сабки|Манзил): ((?:стр|Джуз).+)$/, (m, a, b) => (a === 'Сабки' ? 'Sabqi: ' : 'Manzil: ') + qPages(b));
+  pat(/^Заучивание: (.+)$/, (m, a) => 'Memorization: ' + qPages(a));
+  pat(/^Повторение: (.+)$/, (m, a) => 'Revision: ' + qPages(a));
+  pat(/^✓ Сегодня выучено: (.+)$/, (m, a) => '✓ Memorized today: ' + qPages(a));
+  pat(/^(\d+) из (\d+) стр\.$/, '$1 of $2 p.');
+  pat(/^Весь заученный объём \((\d+) стр\.\) за (\d+) дн\.$/, 'All memorized ($1 p.) in $2 days');
+  pat(/^([\d.]+) джуз в день$/, '$1 juz per day');
+  pat(/^([\d.]+) стр\. в день$/, '$1 p. per day');
+  pat(/^(\d+) (стр\.|строк) заучивания → (\d+) стр\. повторения$/, (m, a, u, b) => `${a} ${u === 'строк' ? 'lines' : 'p.'} memorized → ${b} p. revised`);
+  pat(/^Сабки: (\d+) последних стр\. каждый день · Манзил: остальное за (\d+) дн\.$/, 'Sabqi: last $1 p. every day · Manzil: the rest in $2 days');
+  pat(/^Сверх плана сегодня: (\d+) стр\.$/, 'Extra today: $1 p.');
+  pat(/^Заучено (\d+) стр\. → по (\d+) стр\. \(≈ ([\d.]+) джуза\) в день$/, 'Memorized $1 p. → $2 p. (≈ $3 juz) per day');
+  pat(/^Сейчас: (\d+) (стр\.|строк) заучивания → (\d+) стр\. повторения в день$/, (m, a, u, b) => `Now: ${a} ${u === 'строк' ? 'lines' : 'p.'} memorized → ${b} p. revised per day`);
+  pat(/^Следующее: стр\. (\d+), строка (\d+)$/, 'Next: p. $1, line $2');
+
+  // ── Мусхаф
+  add({
+    'Мусхаф': 'Mushaf', 'открыть': 'open', 'продолжить со стр.': 'continue from p.', 'Джуз': 'Juz', 'Сура…': 'Sura…', 'Джуз…': 'Juz…', 'Перейти': 'Go',
+    'Не удалось загрузить разметку мусхафа. Нужен интернет при первом открытии.': 'Could not load the mushaf layout. The first opening needs internet.',
+    'Не удалось загрузить текст. Нужен интернет при первом открытии.': 'Could not load the text. The first opening needs internet.',
+    'Загрузка страницы…': 'Loading page…',
+    'Страница ещё не скачана. Подключитесь к интернету или скачайте весь Коран заранее: ⚙ → Коран → Мусхаф.': 'This page is not downloaded yet. Connect to the internet or download the whole Quran in advance: ⚙ → Quran → Mushaf.',
+    'Повторение': 'Revision', 'эта страница': 'this page', 'из': 'of', 'К стр.': 'To p.', 'Выучить': 'Memorize', '✓ Сегодня выучено': '✓ Memorized today',
+    'Записать': 'Record', 'как': 'as', 'Сохранить': 'Save', 'Отмена': 'Cancel', 'Отметить прочитанное': 'Mark as read', 'Прочитал': 'I read', 'Страница засчитана': 'Page counted', 'Засчитается через': 'Counts in', 'сек.': 's', 'Засчитано сегодня': 'Counted today',
+    'Эти страницы уже засчитаны сегодня ✓': 'These pages are already counted today ✓', 'Засчитывать страницы сами': 'Count pages automatically',
+    'Страница, открытая дольше заданного времени, записывается как прочитанная. На странице задания на повторение — как «Повторение»; при заучивании не засчитывается': 'A page kept open longer than the set time is recorded as read. On a revision-task page — as «Revision»; not counted while memorizing',
+    'Через сколько секунд (не меньше 45)': 'After how many seconds (at least 45)', 'Записывать как': 'Record as', 'Записано': 'Saved',
+    'Таджвид': 'Tajweed', 'Другие оттенки': 'Other shades', 'Без таджвида': 'No tajweed', 'Свои цвета': 'Own colours', 'Точные страницы': 'Exact pages', 'Шрифт «Усмани»': '«Uthmani» font',
+    'Мадд лязим — 6 харакатов': 'Madd lazim — 6 counts', 'Мадд муттасыль / мунфасыль — 4–5': 'Madd muttasil / munfasil — 4–5', 'Мадд при остановке — 2, 4 или 6': 'Madd at a stop — 2, 4 or 6',
+    'Естественный мадд — 2': 'Natural madd — 2', 'Гунна': 'Ghunnah', 'Тафхим — твёрдые буквы': 'Tafkhim — heavy letters', 'Калькаля': 'Qalqalah', 'Непроизносимые буквы': 'Silent letters',
+    'В этом виде таджвида нет: обычный шрифт, зато его можно увеличить (⚙ → Коран → Мусхаф).': 'This view has no tajweed: a regular font, but it can be enlarged (⚙ → Quran → Mushaf).',
+    'Вернуть стандартные цвета': 'Restore standard colours', 'Весь Коран скачан — читается без интернета ✓': 'The whole Quran is downloaded — reads offline ✓', 'Скачано страниц': 'Pages downloaded',
+    'Страницы скачиваются, когда вы их открываете. Можно скачать всё сразу (≈ 51 МБ).': 'Pages are downloaded when you open them. You can download everything at once (≈ 51 MB).',
+    'Остановить': 'Stop', 'Скачать весь Коран': 'Download the whole Quran', 'Скачивание': 'Downloading', 'Не скачалось страниц': 'Pages not downloaded', 'Нажмите ещё раз, когда будет интернет': 'Tap again when you are online',
+    'Весь Коран скачан ✓': 'The whole Quran is downloaded ✓', 'Этот браузер не умеет хранить файлы для офлайна': 'This browser cannot store files for offline use',
+    'Удалить скачанные страницы мусхафа с телефона? Их можно будет скачать снова.': 'Delete the downloaded mushaf pages from this phone? You can download them again.', 'Скачанные страницы удалены': 'Downloaded pages deleted',
+    'Мадинский 1441 (точный)': 'Madani 1441 (exact)', 'Цветной': 'Coloured', 'Цветной — другие оттенки': 'Coloured — other shades',
+    'Страницы и строки — как в печатном мусхафе Комплекса короля Фахда (15 строк), шрифты KFGQPC.': 'Pages and lines as in the printed King Fahd Complex mushaf (15 lines), KFGQPC fonts.',
+    'Размер шрифта': 'Font size', 'Сохранять строки мусхафа': 'Keep mushaf lines', 'Выключите, чтобы крупный текст переносился по ширине экрана': 'Turn off to let large text wrap to the screen width',
+    'Удалить': 'Delete', 'Шрифты © Комплекс короля Фахда (KFGQPC), через QUL / Tarteel. Разметка строк — QUL; текст «Усмани» — quran-text (quran.ws), CC BY 4.0.': 'Fonts © King Fahd Complex (KFGQPC), via QUL / Tarteel. Line layout — QUL; «Uthmani» text — quran-text (quran.ws), CC BY 4.0.', 'Открыть мусхаф': 'Open mushaf', 'Открыть': 'Open', 'Читать суру': 'Read sura', 'Читать': 'Read', 'Вид и таджвид': 'View and tajweed',
+    'Следующая страница': 'Next page', 'Предыдущая страница': 'Previous page', 'Перейти к странице': 'Go to page', 'Закрыть': 'Close'
+  });
+  pat(/^✓ Прочитал: (.+)$/, (m, a) => '✓ I read: ' + a.replace(/стр\. /g, 'p. '));
+  pat(/^Записано ✓ (.+)$/, 'Saved ✓ $1');
 
   window.I18N = { lang, tr, add, pat, start };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();

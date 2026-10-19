@@ -90,12 +90,14 @@
   let hidden = store.get('lt_hidden', { prayers: [], reading: [], finance: [] });
   // настройки хранятся на этом телефоне; у каждого модуля своя секция
   const DEFAULT_SETTINGS = {
-    autoSend: true, theme: 'auto', startTab: 'last',
+    autoSend: true, theme: 'auto', startTab: 'last', dateFmt: 'dmy',
     prayer: { fill: 1, autoNext: true, showTile: true, days: 7 },
     quran: { kind: '', type: 'pages', continuePages: true, days: 10, fresh: 7, stale: 30 },
     finance: { currency: 'с', days: 10 },
     dash: { period: 'last', account: '', cards: {} }, wv: 0,
-    widgets: []
+    undo: { prayers: true, quran: true, finance: true, hide: true, keep: 60, tabOnly: true },
+    widgets: [],
+    mushaf: { kind: 'v4', tj: 'std', colors: {}, size: 100, keepLines: true, auto: true, secs: 50, autoKind: 0 }
   };
   const deepMerge = (d, v) => { const o = Array.isArray(d) ? (Array.isArray(v) ? v : d) : Object.assign({}, d);
     if (!Array.isArray(d) && v && typeof v === 'object') Object.keys(v).forEach((k) => { o[k] = d[k] && typeof d[k] === 'object' && !Array.isArray(d[k]) ? deepMerge(d[k], v[k]) : v[k]; });
@@ -120,7 +122,41 @@
   const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const today = () => iso(new Date());
   const addDays = (s, n) => { const d = new Date(s + 'T12:00:00'); d.setDate(d.getDate() + n); return iso(d); };
-  const ru = (s) => { if (!s) return ''; const [y, m, d] = String(s).split('-'); return d ? `${d}.${m}.${y}` : s; };
+  // формат даты — в Настройки → Общие (одинаковый во всём приложении, в том числе в полях даты)
+  const MON = { ru: ['янв.', 'февр.', 'мар.', 'апр.', 'мая', 'июн.', 'июл.', 'авг.', 'сент.', 'окт.', 'нояб.', 'дек.'], en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] };
+  const WD = { ru: ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'], en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] };
+  function ru(s) {
+    if (!s) return '';
+    const [y, m, d] = String(s).slice(0, 10).split('-'); if (!d) return s;
+    const f = (typeof settings !== 'undefined' && settings.dateFmt) || 'dmy', L = (window.I18N && window.I18N.lang) === 'en' ? 'en' : 'ru';
+    if (f === 'mdy') return `${m}/${d}/${y}`;
+    if (f === 'ymd') return `${y}-${m}-${d}`;
+    if (f === 'dmy-') return `${d}-${m}-${y}`;
+    if (f === 'long') return L === 'en' ? `${MON.en[m - 1]} ${Number(d)}, ${y}` : `${Number(d)} ${MON.ru[m - 1]} ${y}`;
+    return `${d}.${m}.${y}`;
+  }
+  /** Текст в поле даты: «Сб, 17.10.2026», для сегодняшнего дня — «Сегодня, …». */
+  function dateLabel(v) {
+    if (!v) return '—';
+    const L = (window.I18N && window.I18N.lang) === 'en' ? 'en' : 'ru', wd = WD[L][new Date(v + 'T12:00').getDay()];
+    const t = iso(new Date());
+    return (v === t ? (L === 'en' ? 'Today' : 'Сегодня') : v === addDays(t, -1) ? (L === 'en' ? 'Yesterday' : 'Вчера') : wd) + ', ' + ru(v);
+  }
+  /** Поле даты показывает дату в выбранном формате; само системное поле прозрачное поверх — открывает календарь телефона. */
+  const VALUE = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+  function enhanceDate(input) {
+    if (input.dataset.enh) return; input.dataset.enh = '1';
+    let wrap = input.closest('.date-field');
+    if (!wrap) { wrap = document.createElement('label'); wrap.className = 'date-field'; input.parentNode.insertBefore(wrap, input); const sp = document.createElement('span'); sp.className = 'date-text'; wrap.appendChild(sp); wrap.appendChild(input); }
+    const text = wrap.querySelector('.date-text'), paint = () => { text.textContent = dateLabel(VALUE.get.call(input)); };
+    Object.defineProperty(input, 'value', { configurable: true, get() { return VALUE.get.call(this); }, set(v) { VALUE.set.call(this, v); paint(); } });
+    input.addEventListener('input', paint); input.addEventListener('change', paint);
+    input.addEventListener('click', () => { try { input.showPicker && input.showPicker(); } catch (e) {} });
+    paint();
+  }
+  const enhanceDates = (root) => $$('input[type=date]', root || document).forEach(enhanceDate);
+  enhanceDates();
+  const repaintDates = () => $$('input[type=date]').forEach((i) => { const t = i.closest('.date-field'); if (t) t.querySelector('.date-text').textContent = dateLabel(VALUE.get.call(i)); });
   const money = (n) => (Number(n) || 0).toLocaleString(LOC, { maximumFractionDigits: 2 });
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const isTmp = (id) => String(id).indexOf('tmp:') === 0;
@@ -129,10 +165,16 @@
     : isTmp(a[0]) !== isTmp(b[0]) ? (isTmp(a[0]) ? -1 : 1) : (Number(b[0]) || 0) - (Number(a[0]) || 0));
 
   let toastTimer;
-  function toast(msg, isErr) {
+  /** Короткое сообщение внизу. undoEntry — показать кнопку «Отменить». */
+  function toast(msg, isErr, undoEntry) {
     const t = $('#toast');
-    t.textContent = msg; t.className = 'toast show' + (isErr ? ' err' : '');
-    clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.className = 'toast'), 2600);
+    t.textContent = msg; t.className = 'toast show' + (isErr ? ' err' : '') + (undoEntry ? ' has-act' : '');
+    if (undoEntry) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'toast-act'; b.textContent = 'Отменить';
+      b.onclick = () => { t.className = 'toast'; doUndo(undoEntry.id); };
+      t.appendChild(b);
+    }
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.className = 'toast'), undoEntry ? 5000 : 2600);
   }
 
   // ── сеть
@@ -143,8 +185,9 @@
     catch (e) { const err = new Error('Нет связи с сервером'); err.offline = true; throw err; }
     let j;
     try { j = await res.json(); } catch (e) { const err = new Error('Сервер не ответил'); err.offline = true; throw err; }
-    checkVersion(j.v);
+    checkVersion(j.v, j.b);
     if (!j.ok) {
+      if (j.error === 'OLD_SERVER' || j.error === 'Неизвестное действие') { oldServer(); throw new Error(j.message || 'Apps Script устарел: замените Code.gs и сделайте новое развертывание'); }
       if (j.error === 'AUTH') { logout(true); const err = new Error(j.message || 'Нужно войти'); err.auth = true; throw err; }
       throw new Error(j.error || 'Ошибка');
     }
@@ -153,7 +196,10 @@
 
   // ── версии сайта и сервера должны совпадать
   function banner(html, onClick) { const b = $('#banner'); b.innerHTML = html; b.classList.remove('hidden'); b.onclick = onClick || null; }
-  function checkVersion(v) {
+  const NEED_BUILD = 12; // какая сборка Code.gs нужна этому сайту
+  function oldServer() { banner('Apps Script устарел: замените <b>Code.gs</b> и сделайте <b>Развертывания → Управление → ✏ → Новая версия</b>.'); }
+  function checkVersion(v, b) {
+    if (v === APP_VERSION && (b || 0) < NEED_BUILD) { oldServer(); return; }
     if (!v || v === APP_VERSION) return;
     if (v > APP_VERSION) {
       let tried = false; try { tried = sessionStorage.getItem('lt_reload') === String(v); sessionStorage.setItem('lt_reload', String(v)); } catch (e) {}
@@ -244,7 +290,8 @@
       <div class="muted">${sub}</div>
       ${last ? `<div>Последний раз: <b>${ru(last)}</b> <span class="muted">(${ago(last)})</span></div>` : st.memPages.has(a) || (n && suraHifz(st, n).part) ? '<div class="muted">Повторений пока не было</div>' : ''}
       ${fromPre ? `<div class="muted">Отмечено как заученное ранее${pre.date ? ' · ' + ru(pre.date) : ''}</div>` : ''}
-      <table class="mini hz-hist"><tr><th>Вид</th><th>Записей</th><th>Последний раз</th></tr>${rows}</table>`;
+      <table class="mini hz-hist"><tr><th>Вид</th><th>Записей</th><th>Последний раз</th></tr>${rows}</table>
+      <button type="button" class="btn small-btn ghost" data-mopen="${a}">📖 Читать${n ? ' суру' : ''} · стр. ${a}</button>`;
   }
   /** Заучено ранее: страницы (из сур и диапазонов), суры и дата. */
   function hifzPre() {
@@ -262,7 +309,7 @@
     return [id, p.date, p.kind, 'Сура', '', '', '', reps, '', n, s.name, s.ayahs, s.ayahs * reps, p.comment || ''];
   }
   // как в таблице: 0 ID, 1 дата, 2 сумма, 3 действие, 4 категория, 5 комментарий, 6 создано, 7 поток ±, 8 счёт, 9 на счёт
-  const financeRow = (id, p) => [id, p.date, Number(p.amount), p.actionType, p.category || '', p.comment || '', '', '', p.account || '', p.toAccount || ''];
+  const financeRow = (id, p) => [id, p.date, Number(p.amount), p.actionType, p.category || '', p.comment || '', '', '', p.account || '', p.toAccount || '', p.person || ''];
   const prayerRow = (p) => [p.date].concat(PKEYS.map((k) => p[k] || ''), [p.comment || '']);
 
   function view() {
@@ -278,6 +325,8 @@
       if (o.op === 'updateReading') { const i = rd.findIndex((r) => String(r[0]) === String(o.p.id)); if (i >= 0) rd[i] = readingRow(rd[i][0], o.p); if (isPending) pending.add('r:' + o.p.id); }
       if (o.op === 'addFinance') { fi.push(financeRow('tmp:' + o.id, o.p)); if (isPending) pending.add('f:tmp:' + o.id); }
       if (o.op === 'updateFinance') { const i = fi.findIndex((r) => String(r[0]) === String(o.p.id)); if (i >= 0) fi[i] = financeRow(fi[i][0], o.p); if (isPending) pending.add('f:' + o.p.id); }
+      if (o.op === 'deleteFinance') { const i = fi.findIndex((r) => String(r[0]) === String(o.p.id)); if (i >= 0) fi.splice(i, 1); }
+      if (o.op === 'deleteReading') { const i = rd.findIndex((r) => String(r[0]) === String(o.p.id)); if (i >= 0) rd.splice(i, 1); }
     };
     sent.forEach((o) => apply(o, false));
     outbox.forEach((o) => apply(o, true));
@@ -288,8 +337,10 @@
   // ── очередь изменений
   function enqueue(op, p, key) {
     const ex = key && outbox.find((o) => o.key === key && !o.sending);
-    if (ex) { ex.p = p; delete ex.err; } else outbox.push({ id: uid(), op, p, key });
+    let o = ex;
+    if (ex) { ex.p = p; delete ex.err; } else { o = { id: uid(), op, p, key }; outbox.push(o); }
     persist(); changed(); renderAll();
+    return o;
   }
   const opById = (tmpId) => outbox.find((o) => 'tmp:' + o.id === String(tmpId));
 
@@ -311,8 +362,13 @@
         const batch = head.op === 'addFinance' ? queue.filter((o) => o.op === 'addFinance') : [head];
         batch.forEach((o) => { o.sending = true; });
         try {
-          if (head.op === 'addFinance') await api('addFinance', { items: batch.map((o) => Object.assign({ opId: o.id }, o.p)) });
-          else await api(head.op, Object.assign({ opId: head.id }, head.p));
+          let res;
+          if (head.op === 'addFinance') res = await api('addFinance', { items: batch.map((o) => Object.assign({ opId: o.id }, o.p)) });
+          else res = await api(head.op, Object.assign({ opId: head.id }, head.p));
+          // номера новых записей нужны, чтобы отменить их позже
+          if (res && res.byOp) Object.keys(res.byOp).forEach((k) => { opIds[k] = { ids: [res.byOp[k]], at: Date.now() }; });
+          else if (res && res.ids && head.op === 'addReading') opIds[head.id] = { ids: res.ids, at: Date.now() };
+          store.set('lt_opids', opIds);
         } catch (e) {
           batch.forEach((o) => { delete o.sending; });
           if (e.offline || e.auth) throw e;
@@ -356,6 +412,8 @@
       if (!b.unchanged) {
         srv = { ver: b.ver, prayers: b.data.prayers, reading: b.data.reading, finance: b.data.finance };
         sent = []; meta = b.meta; times = b.times || [];
+        // настройки, которые ещё ждут отправки, не должны пропасть после загрузки с сервера
+        outbox.filter((o) => o.op === 'saveConfig').forEach((o) => { meta.config = Object.assign({}, meta.config, { [o.p.key]: o.p.value }); });
         store.set('lt_srv', srv); store.set('lt_meta', meta); store.set('lt_times', times); persist();
         changed(); initUi();
       }
@@ -424,7 +482,7 @@
     $$('.tab').forEach((s) => s.classList.toggle('hidden', s.id !== 'tab-' + name));
     $('#screenTitle').textContent = TITLES[name];
     store.set('lt_tab', name);
-    updateTopSave();
+    updateTopSave(); renderUndoBtn();
     if (name === 'dash') renderStats();
     if (name === 'prayers') { renderNowTile(); scrollActiveTile(); }
     $$('.tab:not(.hidden) textarea').forEach(autoGrow);
@@ -446,10 +504,13 @@
   const offlineNote = () => { if (!online) toast('Нет интернета — сохранено на телефоне, отправится автоматически'); };
 
   // ── настройки: общие
-  $('#openSettings').addEventListener('click', () => { updateHiddenInfo(); fillSettings(); pnStartEdit(); stStartEdit(); accStartEdit(); refStartEdit(); openSettingsHooks.forEach((f) => f()); renderWidgetSettings(); renderPending(); $('#settings').classList.remove('hidden'); });
+  $('#openSettings').addEventListener('click', () => { updateHiddenInfo(); fillSettings(); pnStartEdit(); stStartEdit(); accStartEdit(); refStartEdit(); openSettingsHooks.forEach((f) => f()); renderWidgetSettings(); renderPending(); $('#settings').classList.remove('hidden'); document.documentElement.classList.add('modal-open'); });
   const openSettingsHooks = [];
-  $('#closeSettings').addEventListener('click', () => $('#settings').classList.add('hidden'));
-  $('#settings').addEventListener('click', (e) => { if (e.target.id === 'settings') $('#settings').classList.add('hidden'); });
+  const closeSettings = () => { $('#settings').classList.add('hidden'); document.documentElement.classList.remove('modal-open'); };
+  $('#closeSettings').addEventListener('click', closeSettings);
+  $('#settings').addEventListener('click', (e) => { if (e.target.id === 'settings') closeSettings(); });
+  // прокрутка внутри настроек не должна прокручивать страницу под ними
+  $('#settings').addEventListener('touchmove', (e) => { if (!e.target.closest('.sheet-panel')) e.preventDefault(); }, { passive: false });
   const autoBox = $('#autoSend');
   autoBox.checked = settings.autoSend;
   autoBox.addEventListener('change', () => {
@@ -524,8 +585,9 @@
     });
     $('#prayerRows .status-row').addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b) return;
-      const k = activePrayer, wasEmpty = !pState[k];
+      const k = activePrayer, wasEmpty = !pState[k], prev = { st: Object.assign({}, pState), comment: $('#pComment').value };
       pState[k] = pState[k] === b.dataset.s ? '' : b.dataset.s;
+      pushUndo({ tab: 'prayers', type: 'prayer', date: pDate, prev, label: `${pNameDash(k)}: ${pState[k] || '—'} · ${ru(pDate)}` });
       if (pState[k] && wasEmpty && settings.prayer.autoNext) { // к следующей неотмеченной
         const vk = VK(), i = vk.indexOf(k);
         const next = vk.slice(i + 1).concat(vk.slice(0, i)).find((x) => !pState[x]);
@@ -577,10 +639,19 @@
   }
   let commentTimer;
   $('#pComment').addEventListener('input', () => { clearTimeout(commentTimer); commentTimer = setTimeout(commitPrayer, 700); });
-  $$('.date-nav [data-shift]').forEach((b) => b.addEventListener('click', () => showPrayerDay(addDays(pDate, Number(b.dataset.shift)))));
+  // ‹ › рядом с датой — одинаково на всех вкладках
+  $$('.date-nav [data-dshift]').forEach((b) => b.addEventListener('click', () => {
+    const i = $('#' + b.dataset.for); i.value = addDays(i.value || today(), Number(b.dataset.dshift));
+    i.dispatchEvent(new Event('change', { bubbles: true }));
+  }));
   $('#pDate').addEventListener('change', () => { if ($('#pDate').value) showPrayerDay($('#pDate').value); });
   const fillStatus = () => meta.statuses[settings.prayer.fill] || meta.statuses[1];
-  $('#pAllBest').addEventListener('click', () => { const st = fillStatus(); VK().forEach((k) => { if (!pState[k]) pState[k] = st; }); commitPrayer(); paintPrayers(); });
+  $('#pAllBest').addEventListener('click', () => {
+    const st = fillStatus(), prev = { st: Object.assign({}, pState), comment: $('#pComment').value };
+    VK().forEach((k) => { if (!pState[k]) pState[k] = st; }); commitPrayer(); paintPrayers();
+    const u = pushUndo({ tab: 'prayers', type: 'prayer', date: pDate, prev, label: `Отмечены остальные · ${ru(pDate)}` });
+    if (u) toast('Отмечено ✓', false, u);
+  });
   function applyPrayerSettings() {
     if (!meta) return;
     if (settings.prayer.fillStatus) { const i = meta.statuses.indexOf(settings.prayer.fillStatus); settings.prayer.fill = i >= 0 ? i : 1; delete settings.prayer.fillStatus; saveSettings(); }
@@ -606,7 +677,7 @@
   }
   swipeList($('#pRecent'), {
     onTap: (id) => { showPrayerDay(id); window.scrollTo({ top: 0, behavior: 'smooth' }); renderPrayerRecent(); },
-    onSwipe: (id) => { hide('prayers', id); renderPrayerRecent(); toast('Скрыто из списка'); }
+    onSwipe: (id) => { hide('prayers', id); renderPrayerRecent(); toast('Скрыто из списка', false, pushUndo({ tab: 'prayers', type: 'hide', list: 'prayers', recId: id, label: `Скрытие дня ${ru(id)}` })); }
   });
 
   // ── Времена молитв и плитка «Сейчас» (время берётся из часов телефона)
@@ -782,13 +853,21 @@
     const p = readReadingForm();
     if (rEditId) {
       if (p.type === 'suras' && p.suras.length !== 1) throw new Error('При редактировании выберите одну суру');
-      if (isTmp(rEditId)) { const o = opById(rEditId); if (o) { o.p = p; persist(); changed(); } }
-      else enqueue('updateReading', Object.assign({ id: rEditId }, p), 'r|' + rEditId);
-      toast('Запись обновлена ✓'); resetReadingForm(false);
+      let u = null;
+      if (isTmp(rEditId)) { const o = opById(rEditId); if (o) { u = pushUndo({ tab: 'quran', type: 'opedit', op: o.id, prev: o.p, label: 'Изменение записи Корана' }); o.p = p; persist(); changed(); } }
+      else {
+        const old = view().reading.find((r) => String(r[0]) === String(rEditId));
+        if (old) u = pushUndo({ tab: 'quran', type: 'update', op: 'updateReading', key: 'r|' + rEditId, recId: rEditId, prev: rowToReading(old), label: `Изменение записи №${rEditId}` });
+        enqueue('updateReading', Object.assign({ id: rEditId }, p), 'r|' + rEditId);
+      }
+      toast('Запись обновлена ✓', false, u); resetReadingForm(false);
     } else {
-      if (p.type === 'suras') p.suras.forEach((n) => enqueue('addReading', Object.assign({}, p, { suras: [n] })));
-      else enqueue('addReading', p);
-      toast(p.type === 'suras' ? `Добавлено сур: ${p.suras.length} ✓` : 'Запись добавлена ✓'); resetReadingForm(true);
+      const ops = [];
+      if (p.type === 'suras') p.suras.forEach((n) => ops.push(enqueue('addReading', Object.assign({}, p, { suras: [n] })).id));
+      else ops.push(enqueue('addReading', p).id);
+      const what = p.type === 'suras' ? p.suras.map((n) => suraBy(n).name).join(', ') : `стр. ${p.from}–${p.to}`;
+      const u = pushUndo({ tab: 'quran', type: 'add', ops, del: 'deleteReading', label: `${p.kind}: ${what}` });
+      toast(p.type === 'suras' ? `Добавлено сур: ${p.suras.length} ✓` : 'Запись добавлена ✓', false, u); resetReadingForm(true);
     }
     renderAll(); offlineNote(); flush({ all: true, notify: true });
   }
@@ -807,8 +886,8 @@
     onTap: editReading,
     onSwipe: (id) => {
       const o = isTmp(id) && opById(id);
-      if (o) { outbox = outbox.filter((x) => x !== o); persist(); changed(); toast('Неотправленная запись удалена'); }
-      else { hide('reading', id); toast('Скрыто из списка'); }
+      if (o) { outbox = outbox.filter((x) => x !== o); persist(); changed(); toast('Неотправленная запись удалена', false, pushUndo({ tab: 'quran', type: 'oprestore', opObj: o, label: 'Удаление неотправленной записи' })); }
+      else { hide('reading', id); toast('Скрыто из списка', false, pushUndo({ tab: 'quran', type: 'hide', list: 'reading', recId: id, label: 'Скрытие записи из списка' })); }
       if (String(id) === String(rEditId)) resetReadingForm(false);
       renderAll();
     }
@@ -877,23 +956,23 @@
     const cats = FINREF.cats[fAction] || [];
     if (cats.indexOf(fCategory) < 0) fCategory = '';
     $('#fCategory').innerHTML = cats.map((c) => `<button type="button" data-v="${esc(c)}" class="${c === fCategory ? 'on' : ''}"><span class="ic">${icon(fAction, c)}</span>${esc(c)}${budgetFor(fAction, c) ? `<i class="bdot ${budgetLevel(monthSpent(fAction, c), budgetFor(fAction, c).limit)}"></i>` : ''}</button>`).join('') || '<span class="muted small">Нет категорий — добавьте их в ⚙ настройках</span>';
-    updateBudgetHint();
+    updateBudgetHint(); renderPerson();
   }
   function setAction(a) {
     fAction = a; $$('#fAction button').forEach((x) => x.classList.toggle('on', x.dataset.v === a));
     if (!fAccTouched) fAccount = defaultAccount(a);
-    renderCategories(); renderAccounts();
+    renderCategories(); renderAccounts(); renderDebtBox(); renderFinanceRecent();
   }
   $('#fAction').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setAction(b.dataset.v); });
   $('#fCategory').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     fCategory = fCategory === b.dataset.v ? '' : b.dataset.v;
     $$('#fCategory button').forEach((x) => x.classList.toggle('on', x.dataset.v === fCategory));
-    updateBudgetHint();
+    updateBudgetHint(); renderPerson();
   });
   // Безопасный калькулятор: цифры и + - * / ( )
   function calc(expr) {
-    const s = String(expr).replace(/,/g, '.').replace(/\s+/g, '');
+    const s = String(expr).replace(/,/g, '.').replace(/\s+/g, '').replace(/[×xX]/g, '*').replace(/[÷:]/g, '/').replace(/[−–]/g, '-');
     if (!s || !/^[0-9+\-*/().]+$/.test(s)) return NaN;
     let i = 0;
     const num = () => { const m = /^\d+(\.\d+)?|^\.\d+/.exec(s.slice(i)); if (!m) throw 0; i += m[0].length; return parseFloat(m[0]); };
@@ -904,29 +983,43 @@
   }
   $('#fAmount').addEventListener('input', () => {
     const raw = $('#fAmount').value, v = calc(raw);
-    $('#fCalc').textContent = /[+\-*/]/.test(raw.replace(/^-/, '')) && !isNaN(v) ? `= ${money(v)} ${settings.finance.currency || 'с'}` : '';
+    $('#fCalc').textContent = /[+\-*/×÷−()]/.test(raw.replace(/^-/, '')) && !isNaN(v) ? `= ${money(v)} ${settings.finance.currency || 'с'}` : '';
+  });
+  // кнопки калькулятора: на цифровой клавиатуре телефона нет + − × ÷ ( )
+  $('#fKeys').addEventListener('pointerdown', (e) => { if (e.target.closest('button')) e.preventDefault(); }); // клавиатура не закрывается
+  $('#fKeys').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    const el = $('#fAmount'), k = b.dataset.k, v = el.value;
+    let a = el.selectionStart == null ? v.length : el.selectionStart, z = el.selectionEnd == null ? v.length : el.selectionEnd;
+    if (document.activeElement !== el) { a = z = v.length; }
+    if (k === '=') { const r = calc(v); if (isNaN(r)) { toast('Не получается посчитать — проверьте выражение', true); return; } el.value = String(r); a = z = el.value.length; }
+    else if (k === 'back') { if (a === z && a > 0) a--; el.value = v.slice(0, a) + v.slice(z); z = a; }
+    else { el.value = v.slice(0, a) + k + v.slice(z); a = z = a + k.length; }
+    el.focus({ preventScroll: true }); try { el.setSelectionRange(a, z); } catch (x) {}
+    el.dispatchEvent(new Event('input'));
   });
   function readFinanceForm() {
     const amount = calc($('#fAmount').value);
     if (!(amount > 0)) throw new Error('Введите сумму');
     if (!fAction) throw new Error('Выберите действие');
     if (fAction === meta.fin.DEBT && !fCategory) throw new Error('Выберите, какой это долг');
+    if (fAction === meta.fin.DEBT && !fPerson) throw new Error('Выберите человека');
     if (!$('#fDate').value) throw new Error('Укажите дату');
     const tr = isTransfer(fAction);
     if (tr && (!fAccount || !fTo)) throw new Error('Для перевода выберите оба счёта');
     if (tr && fAccount === fTo) throw new Error('Счета перевода должны различаться');
     return { amount, actionType: fAction, category: tr ? meta.fin.BETWEEN : fCategory, date: $('#fDate').value, comment: $('#fComment').value.trim(),
-      account: fAccount || '', toAccount: tr ? fTo : '' };
+      account: fAccount || '', toAccount: tr ? fTo : '', person: isDebt(fAction) ? fPerson : '' };
   }
   function resetFinanceForm() {
     fEdit = null; fRecur = null; $('#fEdit').classList.add('hidden'); $('#fSave').textContent = 'Добавить в список';
     $('#fAmount').value = ''; $('#fCalc').textContent = ''; setText($('#fComment'), '');
-    fAccTouched = false; fAccount = defaultAccount(fAction); fTo = ''; renderAccounts();
+    fAccTouched = false; fAccount = defaultAccount(fAction); fTo = ''; fPerson = ''; renderAccounts(); renderPerson();
   }
   function fillFinanceForm(it, label) {
     $('#fAmount').value = it.amount; $('#fCalc').textContent = '';
     fAccTouched = true; fAccount = it.account || ''; fTo = it.toAccount || '';
-    setAction(it.actionType); fCategory = it.category || ''; renderCategories(); renderAccounts();
+    setAction(it.actionType); fCategory = it.category || ''; fPerson = it.person || ''; renderCategories(); renderAccounts();
     $('#fDate').value = it.date; setText($('#fComment'), it.comment);
     $('#fEdit span').textContent = label; $('#fEdit').classList.remove('hidden');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -935,16 +1028,22 @@
   $('#fSave').addEventListener('click', () => {
     let it;
     try { it = readFinanceForm(); } catch (e) { toast(e.message, true); return; }
+    const fLabel = (x) => `${x.actionType} ${money(x.amount)}${x.category ? ' · ' + x.category : ''}`;
     if (fEdit && fEdit.mode === 'saved') {
+      const old = view().finance.find((r) => String(r[0]) === String(fEdit.id));
+      const u = old && pushUndo({ tab: 'finance', type: 'update', op: 'updateFinance', key: 'f|' + fEdit.id, recId: fEdit.id, prev: rowToFinance(old), label: `Изменение записи №${fEdit.id}` });
       enqueue('updateFinance', Object.assign({ id: fEdit.id }, it), 'f|' + fEdit.id);
-      toast(`Запись №${fEdit.id} изменена ✓`); offlineNote(); if (settings.autoSend) flush();
+      toast(`Запись №${fEdit.id} изменена ✓`, false, u); offlineNote(); if (settings.autoSend) flush();
     } else if (fEdit && fEdit.mode === 'queue') {
       const o = outbox.find((x) => x.id === fEdit.opId);
-      if (o) { o.p = it; delete o.err; persist(); changed(); }
-      toast('Изменено в списке');
+      let u = null;
+      if (o) { u = pushUndo({ tab: 'finance', type: 'opedit', op: o.id, prev: o.p, label: 'Изменение записи в списке' }); o.p = it; delete o.err; persist(); changed(); }
+      toast('Изменено в списке', false, u);
     } else {
       if (fRecur) { it.recurId = fRecur.id; it.recurDue = fRecur.due; }
-      enqueue('addFinance', it); toast(fRecur ? 'Платёж добавлен ✓' : `В списке: ${outbox.filter((o) => o.op === 'addFinance').length}`); budgetWarn(it);
+      const op = enqueue('addFinance', it);
+      const u = pushUndo({ tab: 'finance', type: 'add', ops: [op.id], del: 'deleteFinance', label: fLabel(it) });
+      toast(fRecur ? 'Платёж добавлен ✓' : `В списке: ${outbox.filter((o) => o.op === 'addFinance').length}`, false, u); budgetWarn(it);
       if (fRecur && settings.autoSend) flush({ all: true });
     }
     resetFinanceForm(); renderAll();
@@ -958,14 +1057,14 @@
   function financeItemHtml(it, sub, pend) {
     const tr = isTransfer(it.actionType), sign = tr ? 0 : flowSign(it.actionType, it.category);
     const acc = accText(it.account, tr ? it.toAccount : '');
-    return `<div class="main"><div class="t">${esc(it.comment || (tr ? 'Перевод' : it.category) || it.actionType)} ${pend || ''}</div><div class="s">${sub}${acc ? ' · ' + acc : ''}</div></div>
+    return `<div class="main"><div class="t">${esc(it.comment || (isDebt(it.actionType) && it.person ? it.person : '') || (tr ? 'Перевод' : it.category) || it.actionType)} ${pend || ''}</div><div class="s">${sub}${acc ? ' · ' + acc : ''}</div></div>
       <div class="amt ${sign > 0 ? 'in' : ''}">${tr ? '⇄ ' : sign > 0 ? '+' : sign < 0 ? '−' : ''}${money(it.amount)}</div>`;
   }
   function renderQueue() {
     const q = outbox.filter((o) => o.op === 'addFinance');
     $('#queueBox').classList.toggle('hidden', !q.length);
     $('#fQueue').innerHTML = q.map((o) => swipeWrap(o.id, financeItemHtml(o.p,
-      `${o.err ? '<b class="err-text">⚠ ' + esc(o.err) + '</b> · ' : ''}${ru(o.p.date)} · ${esc(o.p.actionType)}${o.p.category ? ' · ' + esc(o.p.category) : ''}`), 'Убрать',
+      `${o.err ? '<b class="err-text">⚠ ' + esc(o.err) + '</b> · ' : ''}${ru(o.p.date)} · ${esc(o.p.actionType)}${o.p.category ? ' · ' + esc(o.p.category) : ''}${o.p.person ? ' · 👤 ' + esc(o.p.person) : ''}`), 'Убрать',
       fEdit && fEdit.mode === 'queue' && fEdit.opId === o.id ? 'editing' : '')).join('');
     $('#queueTotal').textContent = q.length ? `${q.length} шт.` + (settings.autoSend ? (online ? ' · Уйдут в течение минуты' : ' · Уйдут, когда появится интернет') : '') : '';
   }
@@ -974,28 +1073,37 @@
       const o = outbox.find((x) => x.id === opId); if (!o) return;
       fEdit = { mode: 'queue', opId }; fillFinanceForm(o.p, 'Изменение записи из списка'); $('#fSave').textContent = 'Сохранить в списке'; renderQueue();
     },
-    onSwipe: (opId) => { outbox = outbox.filter((x) => x.id !== opId); persist(); changed(); if (fEdit && fEdit.mode === 'queue') resetFinanceForm(); renderAll(); toast('Убрано из списка'); }
+    onSwipe: (opId) => {
+      const o = outbox.find((x) => x.id === opId);
+      outbox = outbox.filter((x) => x.id !== opId); persist(); changed(); if (fEdit && fEdit.mode === 'queue') resetFinanceForm(); renderAll();
+      toast('Убрано из списка', false, o && pushUndo({ tab: 'finance', type: 'oprestore', opObj: o, label: 'Удаление записи из списка' }));
+    }
   });
   function renderFinanceRecent() {
     if (!srv && !outbox.length) { $('#fRecent').innerHTML = skeletonList(3); return; }
     const from = addDays(today(), -(DAYS.finance - 1));
     const queued = new Set(outbox.filter((o) => o.op === 'addFinance').map((o) => 'tmp:' + o.id));
-    const rows = view().finance.filter((r) => r[1] >= from && !queued.has(String(r[0])) && !isHidden('finance', r[0])).sort(byNewest(1));
+    const debtMode = isDebt(fAction);
+    // при действии «Долг» внизу — только записи долгов (за всё время, по выбранному человеку)
+    const rows = view().finance.filter((r) => (debtMode ? r[3] === meta.fin.DEBT && (!debtFilter || debtPerson(r).toLowerCase() === debtFilter.toLowerCase()) : r[1] >= from)
+      && !queued.has(String(r[0])) && !isHidden('finance', r[0])).sort(byNewest(1)).slice(0, debtMode ? 60 : 1e9);
+    $('#fRecentTitle').textContent = debtMode ? (debtFilter ? `Долги: ${debtFilter}` : 'Все записи долгов') : `Последние ${DAYS.finance} дней`;
     $('#fRecent').innerHTML = rows.length ? rows.map((r) => {
-      const it = { amount: r[2], actionType: r[3], category: r[4], comment: r[5], account: r[8], toAccount: r[9] };
-      return swipeWrap(r[0], financeItemHtml(it, `${isTmp(r[0]) ? '' : '№' + r[0] + ' · '}${ru(r[1])} · ${esc(r[3] || 'Без действия')}${r[4] ? ' · ' + esc(r[4]) : ''}`, pendMark('f:' + r[0])),
+      const it = { amount: r[2], actionType: r[3], category: r[4], comment: r[5], account: r[8], toAccount: r[9], person: r[10] };
+      const who = r[3] === meta.fin.DEBT ? ' · 👤 ' + esc(debtPerson(r)) : '';
+      return swipeWrap(r[0], financeItemHtml(it, `${isTmp(r[0]) ? '' : '№' + r[0] + ' · '}${ru(r[1])} · ${esc(r[3] || 'Без действия')}${r[4] ? ' · ' + esc(r[4]) : ''}${who}`, pendMark('f:' + r[0])),
         null, fEdit && fEdit.mode === 'saved' && String(fEdit.id) === String(r[0]) ? 'editing' : '');
-    }).join('') : `<p class="empty">За ${DAYS.finance} дней записей нет</p>`;
+    }).join('') : `<p class="empty">${debtMode ? 'Записей долгов нет' : `За ${DAYS.finance} дней записей нет`}</p>`;
   }
   swipeList($('#fRecent'), {
     onTap: (id) => {
       if (isTmp(id)) { toast('Запись синхронизируется — попробуйте через несколько секунд'); return; }
       const r = view().finance.find((x) => String(x[0]) === String(id)); if (!r) return;
       fEdit = { mode: 'saved', id: r[0] };
-      fillFinanceForm({ amount: r[2], actionType: r[3], category: r[4], date: r[1], comment: r[5], account: r[8], toAccount: r[9] }, `Редактирование записи №${r[0]}`);
+      fillFinanceForm(rowToFinance(r), `Редактирование записи №${r[0]}`);
       $('#fSave').textContent = 'Сохранить изменения'; renderFinanceRecent();
     },
-    onSwipe: (id) => { hide('finance', id); if (fEdit && String(fEdit.id) === String(id)) resetFinanceForm(); renderFinanceRecent(); toast('Скрыто из списка'); }
+    onSwipe: (id) => { hide('finance', id); if (fEdit && String(fEdit.id) === String(id)) resetFinanceForm(); renderFinanceRecent(); toast('Скрыто из списка', false, pushUndo({ tab: 'finance', type: 'hide', list: 'finance', recId: id, label: 'Скрытие записи из списка' })); }
   });
 
   // ═════════════ Настройки: действия и категории (CRUD) ═════════════
@@ -1112,8 +1220,6 @@
         else { f.expense += amt; const k = 'Перевод на ' + r[9] + '\u0000' + a; f.byCategory[k] = (f.byCategory[k] || 0) + amt; }
         return;
       }
-      if (c === fin.BORROWED) f.iOwe += amt; if (c === fin.REPAID) f.iOwe -= amt;
-      if (c === fin.LENT) f.owedToMe += amt; if (c === fin.RETURNED) f.owedToMe -= amt;
       if (c === fin.SAVED) f.savings += amt; if (c === fin.WITHDRAWN) f.savings -= amt;
       if (r[1] < from || r[1] > to) return;
       if (!f.firstDate || r[1] < f.firstDate) f.firstDate = r[1];
@@ -1160,6 +1266,7 @@
       o.entries++; o.pages += Number(r[8]) || 0; o.ayahs += Number(r[12]) || 0;
       const dd = byDay[r[1]] || (byDay[r[1]] = { pages: 0 }); dd.pages += Number(r[8]) || 0;
     });
+    const DL = debtLedger(); f.iOwe = DL.iOwe; f.owedToMe = DL.owed; f.debtList = DL.list; // долги — по людям, без фильтра по счёту
     return (statsMemo[key] = { finance: f, prayers, streak, bestStreak: best, reading, readingByDay: byDay,
       hifzPages: memPages.size, hifzSuras: memSuras.size, memPages, memSuras, touch });
   }
@@ -1236,6 +1343,7 @@
           <span class="acc-per muted small">${dueText(n)}</span><b class="acc-bal">${money(r.amount)}</b></div>`; }).join('')
         + `<div class="acc-row acc-total"><span class="ic">Σ</span><span class="acc-name">Всего за 30 дней</span><span></span><b class="acc-bal">${money(sum)}</b></div>`);
     } },
+    'quran-plan': { title: 'Коран: план на сегодня', on: true, render: () => { const h = planHtml(true); return h ? card('Коран: план на сегодня', h) : ''; } },
     'goals': { title: 'Цели', on: true, render: () => {
       const gs = goals();
       if (!gs.length) return card('Цели', '<p class="muted small" style="margin:0 0 8px">Поставьте цель: страниц Корана в день, хифз за месяц, сумма накоплений, молитвы вовремя.</p><button type="button" class="btn ghost block" data-open-goals>＋ Добавить цель</button>');
@@ -1279,11 +1387,13 @@
         <div class="kpi"><div class="k">🤲 Хайр</div><div class="v" style="color:var(--gold)">${money(f.charity)}</div><div class="note">Входит в расходы</div></div>
       </div>`; } },
     'debts': { title: 'Долги и накопления', on: true, render: (s) => { const f = s.finance;
-      return `<div class="kpis three">
+      const open = (f.debtList || []).filter((o) => o.iOwe > 0.004 || o.owed > 0.004).sort((a, b) => (b.iOwe + b.owed) - (a.iOwe + a.owed));
+      return `<button type="button" class="kpis three kpi-link" data-open-debts>
         <div class="kpi"><div class="k">Я должен</div><div class="v">${money(f.iOwe)}</div></div>
         <div class="kpi"><div class="k">Мне должны</div><div class="v">${money(f.owedToMe)}</div></div>
         <div class="kpi"><div class="k">Накоплено</div><div class="v">${money(f.savings)}</div></div>
-      </div>`; } },
+      </button>${open.length ? card('Долги по людям', open.slice(0, 8).map((o) => `<button type="button" class="debt-row" data-open-debts="${esc(o.name)}"><span class="debt-name">${esc(o.name)}</span>${o.iOwe > 0.004 ? `<span class="debt-amt neg">Я должен ${money(o.iOwe)}</span>` : ''}${o.owed > 0.004 ? `<span class="debt-amt pos">Мне должны ${money(o.owed)}</span>` : ''}</button>`).join('')
+        + (open.length > 8 ? `<p class="muted small" style="margin:6px 0 0">И ещё: ${open.length - 8}</p>` : '')) : ''}`; } },
     'fin-avg': { periodic: true, title: 'Средний расход в день и крупная трата', on: false, render: (s, from, to) => {
       const f = s.finance, start = from === ALL_FROM ? (f.firstDate || to) : from, end = to > today() ? today() : to;
       const days = Math.max(1, Math.round((new Date(end + 'T12:00') - new Date(start + 'T12:00')) / 864e5) + 1);
@@ -1352,7 +1462,7 @@
         '<span class="muted small">Всё время</span>');
     } }
   };
-  const DEFAULT_ORDER = ['goals', 'fin-kpi', 'acc-tiles', 'accounts', 'recurring', 'budgets', 'debts', 'fin-avg', 'exp-cats', 'inc-cats', 'prayer-matrix', 'prayer-streak', 'prayer-days', 'quran', 'hifz'];
+  const DEFAULT_ORDER = ['quran-plan', 'goals', 'fin-kpi', 'acc-tiles', 'accounts', 'recurring', 'budgets', 'debts', 'fin-avg', 'exp-cats', 'inc-cats', 'prayer-matrix', 'prayer-streak', 'prayer-days', 'quran', 'hifz'];
   if ((settings.wv || 0) < 5 && settings.widgets && settings.widgets.length) { // v5: включить «Приход по категориям», плитки карт после финансов
     const l = settings.widgets.filter((w) => w.id !== 'acc-tiles');
     l.forEach((w) => { if (w.id === 'inc-cats') w.on = true; });
@@ -1369,6 +1479,8 @@
     settings.widgets = l;
   }
   if ((settings.wv || 0) < 6) { settings.wv = 6; saveSettings(); }
+  if ((settings.wv || 0) < 7 && settings.widgets && settings.widgets.length) { settings.widgets = [{ id: 'quran-plan', on: true }].concat(settings.widgets.filter((w) => w.id !== 'quran-plan')); }
+  if ((settings.wv || 0) < 7) { settings.wv = 7; saveSettings(); }
   function widgetList() {
     const saved = (settings.widgets || []).filter((w) => WIDGETS[w.id]);
     const ids = saved.map((w) => w.id);
@@ -1415,6 +1527,7 @@
       $('#hzDetail').innerHTML = hifzDetailHtml(st, c.dataset.hs ? { sura: Number(c.dataset.hs) } : { page: Number(c.dataset.hp) });
     };
     $$('#statsBody [data-hzv]').forEach((b) => { b.onclick = () => { settings.dash.hifzView = b.dataset.hzv; saveSettings(); renderStats(); }; });
+    $$('#statsBody [data-open-debts]').forEach((b) => { b.onclick = () => { openTab('finance'); setAction(meta.fin.DEBT); debtFilter = b.dataset.openDebts || ''; renderDebtBox(); renderFinanceRecent(); }; });
     $$('#statsBody [data-open-goals]').forEach((b) => { b.onclick = () => { $('#openSettings').click(); $('#goalsCard').open = true; setTimeout(() => $('#goalsCard').scrollIntoView({ behavior: 'smooth' }), 50); }; });
     $('#editWidgets').onclick = () => { $('#openSettings').click(); $('#widgetsCard').open = true; setTimeout(() => $('#widgetsCard').scrollIntoView({ behavior: 'smooth' }), 50); };
   }
@@ -1476,12 +1589,21 @@
     let v = el.type === 'checkbox' ? el.checked : el.value;
     if (el.hasAttribute('data-num')) v = Number(v);
     if (path === 'finance.currency') v = String(v).trim() || 'с';
+    if (path === 'quran.fresh' || path === 'quran.stale') {
+      v = Math.min(60, Math.max(1, Math.round(v) || (path === 'quran.fresh' ? 7 : 30))); el.value = v;
+      if (path === 'quran.fresh' && v >= settings.quran.stale) { settings.quran.stale = Math.min(60, v + 1); $('[data-set="quran.stale"]').value = settings.quran.stale; }
+      if (path === 'quran.stale' && v <= settings.quran.fresh) { settings.quran.fresh = Math.max(1, v - 1); $('[data-set="quran.fresh"]').value = settings.quran.fresh; }
+    }
+    if (path === 'mushaf.secs') { v = Math.min(900, Math.max(45, Math.round(v) || 50)); el.value = v; }
+    if (path === 'mushaf.autoKind') v = Number(v) || 0;
     setPath(path, v); saveSettings();
+    if (path.indexOf('mushaf.') === 0 && typeof mTick === 'function') mTick(true);
     if (path === 'theme') applyTheme();
+    if (path === 'dateFmt') { repaintDates(); renderStats(); }
     if (path === 'quran.type' && !rEditId) setType(v);
     if (path === 'quran.kind' && meta && meta.kinds.indexOf(v) >= 0 && !rEditId) setKind(v);
     if (path === 'dash.period' && v !== 'last') { period = v; $$('#sPeriod button').forEach((x) => x.classList.toggle('on', x.dataset.p === period)); }
-    applyPrayerSettings(); renderFinance(); changed(); renderAll();
+    applyPrayerSettings(); renderFinance(); changed(); renderAll(); renderUndoBtn();
     $('#rRecentTitle').textContent = `Последние ${DAYS.reading} дней`; $('#fRecentTitle').textContent = `Последние ${DAYS.finance} дней`;
     toast('Сохранено ✓');
   });
@@ -1555,7 +1677,10 @@
   const needOnline = (what) => { if (!online && navigator.onLine === false) throw new Error(`Нужен интернет, чтобы сохранить ${what}`); };
   async function saveConfig(key, value) {
     const r = await api('saveConfig', { key, value });
-    meta.config = r.config; if (r.tg) meta.tg = r.tg; store.set('lt_meta', meta);
+    meta.config = r.config; if (r.tg) meta.tg = r.tg;
+    // настройки, которые ещё ждут отправки (например, план), не должны откатываться
+    outbox.filter((o) => o.op === 'saveConfig').forEach((o) => { meta.config = Object.assign({}, meta.config, { [o.p.key]: o.p.value }); });
+    store.set('lt_meta', meta);
     if (r.notifyError) toast('Напоминания не поставлены: ' + r.notifyError, true);
     return r;
   }
@@ -1726,10 +1851,12 @@
     if (b.dataset.rcpay) {
       const it = { amount: r.amount, actionType: r.action, category: r.category || (isTransfer(r.action) ? meta.fin.BETWEEN : ''), date: today(), comment: r.name + (r.comment ? ': ' + r.comment : ''),
         account: r.account || defaultAccount(r.action), toAccount: '', recurId: r.id, recurDue: r.next };
-      enqueue('addFinance', it); budgetWarn(it); toast(`«${r.name}» оплачено ✓`); offlineNote(); if (settings.autoSend) flush({ all: true });
+      const op = enqueue('addFinance', it); budgetWarn(it);
+      toast(`«${r.name}» оплачено ✓`, false, pushUndo({ tab: 'finance', type: 'add', ops: [op.id], del: 'deleteFinance', label: `Оплата «${r.name}»` })); offlineNote(); if (settings.autoSend) flush({ all: true });
     } else if (b.dataset.rcskip) {
       if (!confirmT(`Пропустить платёж «${r.name}» за ${ru(r.next)}? Следующий — ${ru(advanceDate(r.next, r.repeat, r.every, r.day))}.`)) return;
-      enqueue('skipRecurring', { id: r.id, due: r.next }); toast('Платёж пропущен'); if (settings.autoSend) flush({ all: true });
+      const op = enqueue('skipRecurring', { id: r.id, due: r.next });
+      toast('Платёж пропущен', false, pushUndo({ tab: 'finance', type: 'skip', op: op.id, recur: { id: r.id, due: r.next }, label: `Пропуск «${r.name}»` })); if (settings.autoSend) flush({ all: true });
     } else {
       fEdit = null; fRecur = { id: r.id, due: r.next };
       fillFinanceForm({ amount: r.amount, actionType: r.action, category: r.category, date: today(), comment: r.name + (r.comment ? ': ' + r.comment : ''), account: r.account || defaultAccount(r.action), toAccount: '' }, `Оплата: ${r.name} за ${ru(r.next)}`);
@@ -1771,7 +1898,7 @@
   function openRcForm(i) {
     rcEditing = i;
     rcForm = Object.assign({ name: '', amount: '', action: meta.fin.EXPENSE, category: '', account: '', repeat: 'month', every: 1, next: today(), auto: false, remind: 1, active: true, comment: '' }, i >= 0 ? rcDraft[i] : {});
-    $('#rcForm').innerHTML = rcFormHtml(rcForm); $('#rcForm').classList.remove('hidden'); $('#rcAdd').classList.add('hidden');
+    $('#rcForm').innerHTML = rcFormHtml(rcForm); enhanceDates($('#rcForm')); $('#rcForm').classList.remove('hidden'); $('#rcAdd').classList.add('hidden');
     $('#rcForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
   $('#rcList').addEventListener('click', (e) => { const b = e.target.closest('[data-rci]'); if (b) openRcForm(Number(b.dataset.rci)); });
@@ -1779,7 +1906,7 @@
   $('#rcForm').addEventListener('change', (e) => {
     const f = e.target.dataset.rc; if (!f) return;
     rcForm[f] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
-    if (f === 'action') { rcForm.category = ''; $('#rcForm').innerHTML = rcFormHtml(rcForm); }
+    if (f === 'action') { rcForm.category = ''; $('#rcForm').innerHTML = rcFormHtml(rcForm); enhanceDates($('#rcForm')); }
   });
   $('#rcForm').addEventListener('input', (e) => { const f = e.target.dataset.rc; if (f && e.target.type !== 'checkbox') rcForm[f] = e.target.value; });
   async function rcPersist(list, msg) {
@@ -1882,6 +2009,7 @@
         </div>
         ${(T.totalOnly || g.period === 'total') ? `<label class="gl-by"><span class="muted small">Срок (необязательно)</span><input type="date" data-gl="by" data-i="${i}" value="${esc(g.by || '')}"></label>` : ''}
       </div>`; }).join('') : '<p class="muted small">Целей пока нет.</p>';
+    enhanceDates($('#glEditor'));
   }
   $('#glEditor').addEventListener('change', (e) => {
     const f = e.target.dataset.gl, i = Number(e.target.dataset.i); if (!f || !glDraft[i]) return;
@@ -2010,6 +2138,18 @@
       mark(t + '|pay');
       if (due.length) notifyNow('💳 ' + T('Платежи'), due.map((r) => `${r.name} — ${money(r.amount)} (${T(dueText(r.d))})`).join('\n'), 'pay');
     }
+    // план Корана: в выбранное время — что повторить и что выучить сегодня
+    const nc = cfg().notify || {}, atMin = (q) => { const m = /^(\d{1,2}):(\d{2})$/.exec((q && q.time) || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : -1; };
+    if (nc.qrev && nc.qrev.on && mins >= atMin(nc.qrev) && atMin(nc.qrev) >= 0 && !done[t + '|qrev']) {
+      mark(t + '|qrev');
+      const R = revisionToday();
+      if (R && !R.empty && R.done < R.total) notifyNow('🔁 ' + T('Повторение на сегодня'), revPlainText(R), 'qrev');
+    }
+    if (nc.qmemo && nc.qmemo.on && mins >= atMin(nc.qmemo) && atMin(nc.qmemo) >= 0 && !done[t + '|qmemo']) {
+      mark(t + '|qmemo');
+      const M = memoToday();
+      if (M && !M.done && !M.finished && M.text) notifyNow('📗 ' + T('Выучить сегодня'), T(M.text), 'qmemo');
+    }
   }
   setInterval(notifyTick, 20000);
 
@@ -2126,12 +2266,829 @@
   }));
   openSettingsHooks.push(hzStartEdit);
 
+  // ═════════════ Отмена действий (↶) ═════════════
+  // История хранится на этом телефоне. Каждая запись знает, на какой вкладке сделано действие и как его откатить.
+  let undos = store.get('lt_undo', []);
+  let opIds = store.get('lt_opids', {}); // id операции из очереди → номера записей в таблице (после отправки)
+  const UNDO_KIND = { prayers: 'prayers', quran: 'quran', finance: 'finance' };
+  const saveUndo = () => { store.set('lt_undo', undos); };
+  function undoCutoff() {
+    const k = Number(settings.undo.keep);
+    if (k > 0) return Date.now() - k * 60000;
+    const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); // «до конца дня»
+  }
+  function undoAllowed(e) { return settings.undo[e.type === 'hide' ? 'hide' : UNDO_KIND[e.tab]] !== false; }
+  function pruneUndo() {
+    const c = undoCutoff(), before = undos.length;
+    undos = undos.filter((e) => e.at >= c).slice(-60);
+    Object.keys(opIds).forEach((k) => { if (opIds[k].at < Date.now() - 8 * 864e5) delete opIds[k]; });
+    if (undos.length !== before) saveUndo();
+  }
+  function availableUndos() {
+    pruneUndo();
+    return undos.filter((e) => undoAllowed(e) && (!settings.undo.tabOnly || e.tab === currentTab));
+  }
+  /** Запомнить действие. Возвращает запись истории (для кнопки «Отменить» в уведомлении). */
+  function pushUndo(e) {
+    const entry = Object.assign({ id: uid(), at: Date.now(), tab: currentTab }, e);
+    if (!undoAllowed(entry)) return null;
+    undos.push(entry); pruneUndo(); saveUndo(); renderUndoBtn();
+    return entry;
+  }
+  function renderUndoBtn() {
+    const b = $('#topUndo'); if (!b) return;
+    const list = availableUndos(), last = list[list.length - 1];
+    b.classList.toggle('hidden', !last);
+    b.title = last ? T('Отменить: ') + T(last.label) : '';
+    b.setAttribute('aria-label', b.title || T('Отменить'));
+  }
+  const rowToReading = (r) => ({ date: r[1], kind: r[2], type: r[3] === 'Сура' ? 'suras' : 'pages', from: r[4], to: r[5], suras: r[9] !== '' ? [Number(r[9])] : [], repeats: r[7] || 1, comment: r[13] || '' });
+  const rowToFinance = (r) => ({ amount: Number(r[2]), actionType: r[3], category: r[4] || '', date: r[1], comment: r[5] || '', account: r[8] || '', toAccount: r[9] || '', person: r[10] || '' });
+  /** Откатить добавленную операцию: если ещё в очереди — убрать, если уже в таблице — удалить запись. */
+  function revertAdded(opId, delOp) {
+    const o = outbox.find((x) => x.id === opId && !x.sending);
+    if (o) { outbox = outbox.filter((x) => x !== o); return true; }
+    const ids = (opIds[opId] || {}).ids || [], s = sent.find((x) => x.id === opId);
+    if (!ids.length) return false;
+    if (s) sent = sent.filter((x) => x !== s);
+    ids.forEach((id) => enqueue(delOp, { id }));
+    if (s && s.p && s.p.recurId) enqueue('revertRecurring', { id: s.p.recurId, due: s.p.recurDue });
+    return true;
+  }
+  function doUndo(entryId) {
+    const list = availableUndos(), e = entryId ? undos.find((x) => x.id === entryId) : list[list.length - 1];
+    if (!e) { toast('Нечего отменять'); return; }
+    let ok = true;
+    if (e.type === 'prayer') {
+      enqueue('savePrayer', Object.assign({ date: e.date, comment: e.prev.comment }, e.prev.st), 'prayer|' + e.date);
+      if (pDate === e.date) { Object.assign(pState, e.prev.st); setText($('#pComment'), e.prev.comment); paintPrayers(); }
+    } else if (e.type === 'add') {
+      ok = e.ops.map((id) => revertAdded(id, e.del)).every(Boolean);
+      if (e.recur) { const o = outbox.find((x) => x.op === 'skipRecurring' && x.p.id === e.recur.id && x.p.due === e.recur.due); if (o) outbox = outbox.filter((x) => x !== o); }
+    } else if (e.type === 'skip') {
+      const o = outbox.find((x) => x.id === e.op && !x.sending);
+      if (o) outbox = outbox.filter((x) => x !== o); else enqueue('revertRecurring', { id: e.recur.id, due: e.recur.due });
+    } else if (e.type === 'update') {
+      enqueue(e.op, Object.assign({ id: e.recId }, e.prev), e.key);
+    } else if (e.type === 'opedit') {
+      const o = outbox.find((x) => x.id === e.op);
+      if (o) { o.p = e.prev; delete o.err; } else ok = false;
+    } else if (e.type === 'oprestore') {
+      outbox.push(e.opObj);
+    } else if (e.type === 'plan') {
+      (e.ops || []).forEach((id) => revertAdded(id, 'deleteReading'));
+      const P = planCfg(); P.memo = e.prevMemo; savePlan(P);
+    } else if (e.type === 'hide') {
+      hidden[e.list] = hidden[e.list].filter((x) => x !== String(e.recId)); store.set('lt_hidden', hidden);
+    }
+    undos = undos.filter((x) => x !== e); saveUndo();
+    persist(); changed(); renderAll(); renderUndoBtn();
+    if (!ok) { toast('Не удалось отменить: запись уже обработана. Измените её вручную', true); return; }
+    toast('Отменено: ' + T(e.label));
+    if (settings.autoSend) scheduleFlush(1500);
+  }
+  $('#topUndo').addEventListener('click', () => doUndo());
+  $('#undoClear').addEventListener('click', () => { undos = []; saveUndo(); renderUndoBtn(); toast('История отмены очищена'); });
+  setInterval(renderUndoBtn, 60000);
+
+  // ═════════════ Долги по людям ═════════════
+  // Имя человека хранится в колонке «Человек». У старых записей без имени берём комментарий — вы писали туда имя.
+  const peopleCfg = () => ((cfg().people || {}).items || []);
+  const debtPerson = (r) => String(r[10] || '').trim() || String(r[5] || '').trim() || 'Без имени';
+  /** Остатки по каждому человеку: я должен / мне должны, по всем записям (без фильтра по счёту). */
+  function debtLedger() {
+    const fin = meta.fin, L = {};
+    view().finance.forEach((r) => {
+      if (r[3] !== fin.DEBT) return;
+      const c = r[4], amt = Number(r[2]) || 0, name = debtPerson(r), key = name.toLowerCase();
+      const o = L[key] || (L[key] = { name, iOwe: 0, owed: 0, last: '', count: 0, legacy: false });
+      if (c === fin.BORROWED) o.iOwe += amt; else if (c === fin.REPAID) o.iOwe -= amt;
+      else if (c === fin.LENT) o.owed += amt; else if (c === fin.RETURNED) o.owed -= amt;
+      o.count++; if (r[1] > o.last) o.last = r[1];
+      if (!String(r[10] || '').trim()) o.legacy = true;
+    });
+    const list = Object.values(L).map((o) => Object.assign(o, { iOwe: Math.round(o.iOwe * 100) / 100, owed: Math.round(o.owed * 100) / 100 }));
+    return { list, iOwe: list.reduce((t, o) => t + Math.max(0, o.iOwe), 0), owed: list.reduce((t, o) => t + Math.max(0, o.owed), 0) };
+  }
+  /** Все имена: из списка «Люди» и из записей. */
+  function allPeople() {
+    const seen = {}, out = [];
+    peopleCfg().filter((p) => !p.archived).forEach((p) => { if (!seen[p.name.toLowerCase()]) { seen[p.name.toLowerCase()] = 1; out.push(p.name); } });
+    view().finance.forEach((r) => { const n = String(r[10] || '').trim(); if (n && !seen[n.toLowerCase()] && !peopleCfg().some((p) => p.archived && p.name === n)) { seen[n.toLowerCase()] = 1; out.push(n); } });
+    return out;
+  }
+  let fPerson = '', debtFilter = '';
+  const isDebt = (a) => meta && a === meta.fin.DEBT;
+  /** Выбор человека в форме. При погашении — только те, с кем есть открытый долг, и сумма долга. */
+  function renderPerson() {
+    const wrap = $('#fPersonWrap'); if (!wrap) return;
+    const on = isDebt(fAction); wrap.classList.toggle('hidden', !on); if (!on) return;
+    const fin = meta.fin, repay = fCategory === fin.REPAID || fCategory === fin.RETURNED, L = debtLedger().list;
+    let chips;
+    if (repay) {
+      const side = fCategory === fin.REPAID ? 'iOwe' : 'owed';
+      const open = L.filter((o) => o[side] > 0.004).sort((a, b) => b[side] - a[side]);
+      $('#fPersonLbl').textContent = fCategory === fin.REPAID ? 'Какой долг гасите' : 'Кто вернул';
+      chips = open.map((o) => `<button type="button" data-v="${esc(o.name)}" data-amt="${o[side]}" class="${o.name === fPerson ? 'on' : ''}">${esc(o.name)} <b>${money(o[side])}</b></button>`).join('')
+        || `<span class="muted small">${fCategory === fin.REPAID ? 'Открытых долгов нет' : 'Вам никто не должен'}</span>`;
+    } else {
+      $('#fPersonLbl').textContent = fCategory === fin.LENT ? 'Кому дали' : fCategory === fin.BORROWED ? 'У кого взяли' : 'Человек';
+      const names = allPeople();
+      if (fPerson && names.indexOf(fPerson) < 0) names.unshift(fPerson);
+      chips = names.map((n) => `<button type="button" data-v="${esc(n)}" class="${n === fPerson ? 'on' : ''}">${esc(n)}</button>`).join('');
+    }
+    $('#fPerson').innerHTML = chips + (repay ? '' : '<button type="button" class="chip-add" data-new>＋ Новый человек</button>');
+    $('#fPersonNew').classList.add('hidden');
+  }
+  $('#fPerson').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.new != null) { $('#fPersonNew').classList.remove('hidden'); $('#fPersonNew input').value = ''; $('#fPersonNew input').focus(); return; }
+    fPerson = fPerson === b.dataset.v ? '' : b.dataset.v;
+    if (fPerson && b.dataset.amt && !$('#fAmount').value.trim()) $('#fAmount').value = b.dataset.amt; // погашение: подставить сумму долга
+    renderPerson();
+  });
+  $('#fPersonNew button').addEventListener('click', () => {
+    const v = $('#fPersonNew input').value.trim(); if (!v) return;
+    fPerson = v; renderPerson(); toast(`Человек «${v}» выбран — сохранится вместе с записью`);
+  });
+  $('#fPersonNew input').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#fPersonNew button').click(); } });
+
+  /** Блок «Долги» на вкладке «Финансы» (когда выбрано действие «Долг»). */
+  function renderDebtBox() {
+    const box = $('#debtBox'); if (!box || !meta) return;
+    const on = isDebt(fAction); box.classList.toggle('hidden', !on); if (!on) { debtFilter = ''; return; }
+    const D = debtLedger(), open = D.list.filter((o) => Math.abs(o.iOwe) > 0.004 || Math.abs(o.owed) > 0.004).sort((a, b) => (b.iOwe + b.owed) - (a.iOwe + a.owed));
+    const closed = D.list.length - open.length;
+    box.innerHTML = `<div class="w-head"><div class="lbl">Долги</div>${debtFilter ? '<button type="button" class="link small" data-dall>Все люди</button>' : ''}</div>
+      <div class="kpis"><div class="kpi"><div class="k">Я должен</div><div class="v neg-ink">${money(D.iOwe)}</div></div><div class="kpi"><div class="k">Мне должны</div><div class="v">${money(D.owed)}</div></div></div>
+      ${open.map((o) => `<button type="button" class="debt-row ${debtFilter === o.name ? 'on' : ''}" data-dp="${esc(o.name)}">
+        <span class="debt-name">${esc(o.name)}${o.legacy ? ' <span class="muted small" title="Имя взято из комментария">·&nbsp;из комментария</span>' : ''}</span>
+        ${o.iOwe > 0.004 ? `<span class="debt-amt neg">Я должен ${money(o.iOwe)}</span>` : ''}${o.owed > 0.004 ? `<span class="debt-amt pos">Мне должны ${money(o.owed)}</span>` : ''}
+        ${o.iOwe < -0.004 || o.owed < -0.004 ? '<span class="debt-amt muted small">Переплата</span>' : ''}
+      </button>`).join('') || '<p class="muted small" style="margin:0">Открытых долгов нет.</p>'}
+      ${closed ? `<p class="muted small" style="margin:6px 0 0">Закрыто долгов: ${closed}</p>` : ''}`;
+  }
+  $('#debtBox').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.dall != null) debtFilter = '';
+    else if (b.dataset.dp != null) debtFilter = debtFilter === b.dataset.dp ? '' : b.dataset.dp;
+    renderDebtBox(); renderFinanceRecent();
+  });
+
+  // ── Настройки → Финансы → Люди
+  let plDraft = [];
+  function plStartEdit() {
+    if (!meta) return;
+    plDraft = peopleCfg().map((p) => Object.assign({ orig: p.name }, p));
+    // люди из записей, которых ещё нет в списке
+    allPeople().forEach((n) => { if (!plDraft.some((p) => p.name === n)) plDraft.push({ name: n, orig: n, note: '', archived: false }); });
+    renderPlEditor();
+  }
+  function renderPlEditor() {
+    const L = debtLedger().list;
+    $('#plEditor').innerHTML = plDraft.map((p, i) => { const o = L.find((x) => x.name.toLowerCase() === (p.orig || p.name).toLowerCase());
+      return `<div class="pl-row ${p.archived ? 'archived' : ''}">
+        <input type="text" data-pl="${i}" data-f="name" value="${esc(p.name)}" placeholder="Имя" aria-label="Имя">
+        <input type="text" data-pl="${i}" data-f="note" value="${esc(p.note || '')}" placeholder="Заметка: телефон, кто это" aria-label="Заметка">
+        <span class="pl-bal small">${o && o.iOwe > 0.004 ? `<span class="neg">−${money(o.iOwe)}</span>` : ''}${o && o.owed > 0.004 ? ` <span class="pos">+${money(o.owed)}</span>` : ''}</span>
+        <button type="button" class="icon-btn sm" data-plarch="${i}" title="${p.archived ? 'Вернуть из архива' : 'В архив'}">${p.archived ? '↩' : '📦'}</button>
+      </div>`; }).join('') || '<p class="muted small">Людей пока нет. Их можно добавить здесь или прямо в форме долга.</p>';
+    // старые долги без имени: группы по комментарию
+    const groups = {};
+    view().finance.forEach((r) => { if (r[3] === meta.fin.DEBT && !String(r[10] || '').trim()) { const k = String(r[5] || '').trim(); if (k) groups[k] = (groups[k] || 0) + 1; } });
+    const keys = Object.keys(groups);
+    $('#plLegacy').innerHTML = keys.length ? `<div class="lbl" style="margin:0">Старые долги без имени</div>
+      <p class="muted small">Сейчас имя берётся из комментария. Нажмите, чтобы закрепить его за человеком в таблице.</p>
+      <div class="chips">${keys.map((k) => `<button type="button" class="chip" data-plassign="${esc(k)}">${esc(k)} · ${groups[k]}</button>`).join('')}</div>` : '';
+  }
+  $('#plEditor').addEventListener('input', (e) => { const i = e.target.dataset.pl, f = e.target.dataset.f; if (i != null && plDraft[i]) plDraft[i][f] = e.target.value; });
+  $('#plEditor').addEventListener('click', (e) => { const b = e.target.closest('[data-plarch]'); if (!b) return; const p = plDraft[Number(b.dataset.plarch)]; p.archived = !p.archived; renderPlEditor(); });
+  $('#plAdd').addEventListener('click', () => { plDraft.push({ name: '', orig: '', note: '', archived: false }); renderPlEditor(); $$('#plEditor [data-f="name"]').pop().focus(); });
+  $('#plSave').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+    needOnline('людей');
+    const items = plDraft.filter((p) => p.name.trim()).map((p) => ({ name: p.name.trim(), orig: p.orig || '', note: (p.note || '').trim(), archived: !!p.archived }));
+    const r = await api('savePeople', { items });
+    meta.config = r.config; store.set('lt_meta', meta);
+    plStartEdit(); changed(); renderAll();
+    toast(r.renamed ? `Сохранено ✓ · Переименовано записей: ${r.renamed}` : 'Люди сохранены ✓');
+    if (r.renamed) sync(true);
+  }));
+  $('#plLegacy').addEventListener('click', (e) => withBusy(e.target.closest('button') || e.currentTarget, async () => {
+    const b = e.target.closest('[data-plassign]'); if (!b) return;
+    needOnline('людей');
+    const r = await api('assignPerson', { person: b.dataset.plassign, comment: b.dataset.plassign });
+    toast(`Привязано записей: ${r.updated} ✓`); await sync(true); plStartEdit();
+  }));
+  openSettingsHooks.push(plStartEdit);
+
+  // ═════════════ План Корана: повторение и заучивание ═════════════
+  // Мусхаф 604 страницы, 15 строк на странице. Джузы — по Мадинскому мусхафу.
+  const LINES = 15;
+  const JUZ_START = [1, 22, 42, 62, 82, 102, 121, 142, 162, 182, 201, 222, 242, 262, 282, 302, 322, 342, 362, 382, 402, 422, 442, 462, 482, 502, 522, 542, 562, 582];
+  const juzOf = (p) => { let j = 1; JUZ_START.forEach((s, i) => { if (p >= s) j = i + 1; }); return j; };
+  const juzPages = (j) => [JUZ_START[j - 1], j < 30 ? JUZ_START[j] - 1 : 604];
+  const PLAN_DEFAULT = {
+    rev: { method: 'cycle', days: 10, amount: 1, unit: 'juz', recent: 20, oldDays: 7 },
+    memo: { on: false, amount: 5, unit: 'lines', order: 'forward', start: 1, pos: null, lastDone: '', lastTask: '' }
+  };
+  const planCfg = () => { const c = cfg().plan || {}; return { rev: Object.assign({}, PLAN_DEFAULT.rev, c.rev || {}), memo: Object.assign({}, PLAN_DEFAULT.memo, c.memo || {}) }; };
+  /** Диапазоны страниц: [3,4,5,9] → «стр. 3–5, 9», целые джузы подписываются. */
+  function pageRanges(list) {
+    const s = [...new Set(list)].sort((a, b) => a - b), out = [];
+    s.forEach((p) => { const r = out[out.length - 1]; if (r && p === r[1] + 1) r[1] = p; else out.push([p, p]); });
+    return out;
+  }
+  function rangeText(r) {
+    const [a, b] = r, ja = juzOf(a), jb = juzOf(b), full = juzPages(ja)[0] === a && juzPages(jb)[1] === b;
+    const pages = a === b ? `стр. ${a}` : `стр. ${a}–${b}`;
+    return full ? `${ja === jb ? `Джуз ${ja}` : `Джузы ${ja}–${jb}`} (${pages})` : pages;
+  }
+  /** Даты повторения по страницам: последняя до сегодняшнего дня и что повторено сегодня. */
+  function pageDates() {
+    const t = today(), KM = meta.kinds[1], KR = meta.kinds[2], prev = {}, todayRev = new Set(), memDate = {}, pre = hifzPre();
+    pre.pages.forEach((p) => { if (pre.date) prev[p] = pre.date; });
+    view().reading.forEach((r) => {
+      if (r[2] !== KM && r[2] !== KR) return;
+      let a = r[4] !== '' ? Number(r[4]) : null, b = r[5] !== '' ? Number(r[5]) : null;
+      if (a == null && r[9] !== '') [a, b] = suraPages(Number(r[9]));
+      if (a == null) return;
+      for (let p = a; p <= b; p++) {
+        if (r[2] === KM && (!memDate[p] || r[1] > memDate[p])) memDate[p] = r[1];
+        if (r[1] < t) { if (!prev[p] || r[1] > prev[p]) prev[p] = r[1]; }
+        else if (r[1] === t && r[2] === KR) todayRev.add(p);
+      }
+    });
+    return { prev, todayRev, memDate };
+  }
+  /** Задание на повторение на сегодня. Берём заученные страницы, которые дольше всех не повторяли (при равенстве — по порядку мусхафа).
+   *  Прочитанное заранее уже «свежее» и само уходит из следующих дней. */
+  function revisionToday() {
+    const P = planCfg().rev; if (P.method === 'off' || !meta) return null;
+    const st = computeStats(ALL_FROM, today()), D = pageDates(), t = today();
+    // выученное сегодня впервые — это не повторение
+    const mem = [...st.memPages].filter((p) => !(D.memDate[p] === t && !D.prev[p])).sort((a, b) => a - b);
+    if (!mem.length) return { empty: true };
+    const oldest = (list, k) => list.slice().sort((a, b) => ((D.prev[a] || '') < (D.prev[b] || '') ? -1 : (D.prev[a] || '') > (D.prev[b] || '') ? 1 : a - b)).slice(0, Math.max(0, k));
+    const memo = planCfg().memo;
+    let portion = [], recent = [], k = 0, note = '';
+    if (P.method === 'cycle') { k = Math.ceil(mem.length / Math.max(1, P.days)); note = `Весь заученный объём (${mem.length} стр.) за ${P.days} дн.`; }
+    else if (P.method === 'fixed') { k = P.unit === 'juz' ? Math.round(P.amount * 20) : Math.round(P.amount); note = `${P.amount} ${P.unit === 'juz' ? 'джуз' : 'стр.'} в день`; }
+    else if (P.method === 'ratio') { k = memo.unit === 'pages' ? memo.amount * LINES : memo.amount; note = `${memo.amount} ${memo.unit === 'pages' ? 'стр.' : 'строк'} заучивания → ${k} стр. повторения`; }
+    if (P.method === 'sabqi') {
+      // сабки: последние выученные страницы — каждый день; манзил: остальное по кругу за N дней
+      recent = mem.slice().sort((a, b) => ((D.memDate[b] || '') > (D.memDate[a] || '') ? 1 : (D.memDate[b] || '') < (D.memDate[a] || '') ? -1 : b - a)).slice(0, Math.max(0, P.recent));
+      const rest = mem.filter((p) => recent.indexOf(p) < 0);
+      portion = oldest(rest, Math.ceil(rest.length / Math.max(1, P.oldDays)));
+      note = `Сабки: ${recent.length} последних стр. каждый день · Манзил: остальное за ${P.oldDays} дн.`;
+    } else portion = oldest(mem, Math.min(k, mem.length));
+    const all = recent.concat(portion), done = all.filter((p) => D.todayRev.has(p));
+    return { recent: pageRanges(recent), portion: pageRanges(portion), total: all.length, done: done.length, note, extra: [...D.todayRev].filter((p) => all.indexOf(p) < 0).length, pages: all };
+  }
+  // ── заучивание: позиция {p, l} — следующая строка, которую нужно выучить
+  function memoOrder(order) {
+    if (order === 'juz-back') { const out = []; for (let j = 30; j >= 1; j--) { const [a, b] = juzPages(j); for (let p = a; p <= b; p++) out.push(p); } return out; }
+    return Array.from({ length: 604 }, (_, i) => i + 1);
+  }
+  function memoPos(M, mem) {
+    const seq = memoOrder(M.order);
+    let pos = M.pos && M.pos.p ? Object.assign({}, M.pos) : { p: Number(M.start) || seq[0], l: 1 };
+    // пропускаем уже заученные страницы, если начинаем новую страницу
+    let i = seq.indexOf(pos.p), guard = 0;
+    while (pos.l === 1 && mem.has(pos.p) && guard++ < 604) { i++; if (i >= seq.length) return null; pos = { p: seq[i], l: 1 }; }
+    return pos;
+  }
+  /** Задание на заучивание: с позиции — amount строк или страниц. */
+  function memoToday() {
+    const M = planCfg().memo; if (!M.on || !meta) return null;
+    const st = computeStats(ALL_FROM, today()), seq = memoOrder(M.order), t = today();
+    if (M.lastDone === t) return { done: true, text: M.lastTask };
+    const pos = memoPos(M, st.memPages); if (!pos) return { finished: true };
+    const parts = []; let left = M.unit === 'pages' ? M.amount * LINES : M.amount, p = pos.p, l = pos.l, i = seq.indexOf(p), guard = 0;
+    const full = []; // страницы, которые будут выучены полностью
+    while (left > 0 && guard++ < 700) {
+      const take = Math.min(left, LINES - l + 1);
+      parts.push({ p, a: l, b: l + take - 1 });
+      if (l + take - 1 === LINES) full.push(p);
+      left -= take; l += take;
+      if (l > LINES) { i++; if (i >= seq.length) { p = null; break; } p = seq[i]; l = 1; while (st.memPages.has(p) && i < seq.length - 1) { i++; p = seq[i]; } }
+    }
+    const text = parts.map((x) => (x.a === 1 && x.b === LINES ? `стр. ${x.p}` : `стр. ${x.p}, строки ${x.a}–${x.b}`)).join(' · ');
+    return { parts, full, next: p ? { p, l } : null, text, sura: surasOnPage(pos.p).filter((n) => suraBy(n).name).map((n) => `${n}. ${suraBy(n).name}`).join(', ') };
+  }
+  function revPlainText(R) {
+    const parts = [];
+    if (R.recent.length) parts.push(T('Сабки') + ': ' + R.recent.map((r) => T(rangeText(r))).join(', '));
+    if (R.portion.length) parts.push((R.recent.length ? T('Манзил') + ': ' : '') + R.portion.map((r) => T(rangeText(r))).join(', '));
+    return parts.join('\n');
+  }
+  /** Сохранить план (локально сразу, на сервер — через очередь, работает и без интернета). */
+  function savePlan(plan) {
+    meta.config = Object.assign({}, meta.config, { plan }); store.set('lt_meta', meta);
+    enqueue('saveConfig', { key: 'plan', value: plan }, 'cfg|plan');
+    if (settings.autoSend) scheduleFlush(800);
+  }
+  function memoDone() {
+    const task = memoToday(); if (!task || !task.parts) return;
+    const P = planCfg(), KM = meta.kinds[1];
+    // в «Чтение» пишем только полностью выученные страницы — так карта хифза остаётся точной
+    const ops = pageRanges(task.full).map(([a, b]) => enqueue('addReading', { date: today(), kind: KM, type: 'pages', from: a, to: b, repeats: 1, comment: 'План заучивания' }).id);
+    const prevMemo = Object.assign({}, P.memo);
+    P.memo.pos = task.next; P.memo.lastDone = today(); P.memo.lastTask = task.text;
+    savePlan({ rev: P.rev, memo: P.memo });
+    const u = pushUndo({ tab: 'quran', type: 'plan', prevMemo, ops, label: 'Заучивание: ' + task.text });
+    toast('Выучено ✓ Завтра — дальше', false, u); renderAll();
+  }
+  function revDone(ranges) {
+    const KR = meta.kinds[2], ops = [];
+    ranges.forEach(([a, b]) => ops.push(enqueue('addReading', { date: today(), kind: KR, type: 'pages', from: a, to: b, repeats: 1, comment: 'План повторения' }).id));
+    const u = pushUndo({ tab: 'quran', type: 'add', ops, del: 'deleteReading', label: 'Повторение: ' + ranges.map(rangeText).join(', ') });
+    toast('Повторение отмечено ✓', false, u); renderAll(); if (settings.autoSend) scheduleFlush(1500);
+  }
+  function planHtml(compact) {
+    if (!meta) return '';
+    const R = revisionToday(), M = memoToday();
+    if (!R && !M) return '';
+    let h = '';
+    if (R) {
+      if (R.empty) h += `<div class="plan-part"><div class="plan-h">🔁 Повторение</div><p class="muted small">Пока нечего повторять: отметьте заученное в ⚙ → Коран или добавьте запись «Заучивание».</p></div>`;
+      else {
+        const TR = pageDates().todayRev, rem = R.recent.concat(R.portion).filter(([a, b]) => { for (let p = a; p <= b; p++) if (!TR.has(p)) return true; return false; });
+        h += `<div class="plan-part"><div class="plan-h">🔁 Повторить сегодня <span class="plan-count ${R.done >= R.total ? 'ok' : ''}">${R.done} из ${R.total} стр.</span></div>
+          ${R.recent.length ? `<div class="plan-line"><span class="muted small">Сабки:</span> ${R.recent.map(rangeText).join(', ')}</div>` : ''}
+          ${R.portion.length ? `<div class="plan-line">${R.recent.length ? '<span class="muted small">Манзил:</span> ' : ''}<b>${R.portion.map(rangeText).join(', ')}</b></div>` : ''}
+          ${compact ? '' : `<p class="muted small">${esc(R.note)}${R.extra ? ` · Сверх плана сегодня: ${R.extra} стр.` : ''}</p>`}
+          <div class="row gap plan-btns">${R.done >= R.total ? '<div class="plan-ok">✓ На сегодня всё повторено</div>' : `<button type="button" class="btn small-btn primary grow" data-plan-rev>✓ Повторил${rem.length > 1 ? ' всё' : ''}</button>`}<button type="button" class="btn small-btn ghost" data-mopen="rev">📖 Открыть</button></div></div>`;
+      }
+    }
+    if (M) {
+      if (M.finished) h += `<div class="plan-part"><div class="plan-h">📗 Заучивание</div><div class="plan-ok">Весь Коран по плану выучен. Машаллах!</div></div>`;
+      else if (M.done) h += `<div class="plan-part"><div class="plan-h">📗 Заучивание</div><div class="plan-ok">✓ Сегодня выучено: ${esc(M.text)}</div><p class="muted small">Завтра — следующая часть.</p></div>`;
+      else h += `<div class="plan-part"><div class="plan-h">📗 Выучить сегодня</div><div class="plan-line"><b>${esc(M.text)}</b></div><div class="muted small">${esc(M.sura)}</div>
+          <div class="row gap plan-btns"><button type="button" class="btn small-btn primary grow" data-plan-memo>✓ Выучил</button><button type="button" class="btn small-btn ghost grow" data-plan-later>Ещё не выучил</button><button type="button" class="btn small-btn ghost" data-mopen="memo">📖 Открыть</button></div></div>`;
+    }
+    return h;
+  }
+  function renderPlanBox() {
+    const box = $('#planBox'); if (!box) return;
+    const h = planHtml(false); box.classList.toggle('hidden', !h); box.innerHTML = h ? `<div class="w-head"><div class="lbl">План на сегодня</div><button type="button" class="link small" data-plan-settings>Настроить</button></div>${h}` : '';
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-plan-rev],[data-plan-memo],[data-plan-later],[data-plan-settings]'); if (!b) return;
+    if (b.dataset.planRev != null) { const R = revisionToday(), D = pageDates(); revDone(pageRanges(R.pages.filter((p) => !D.todayRev.has(p)))); }
+    else if (b.dataset.planMemo != null) memoDone();
+    else if (b.dataset.planLater != null) toast('Хорошо — завтра будет то же самое задание. Повторяйте, пока не выучите');
+    else { $('#openSettings').click(); const sec = $$('.set-sec').find((s) => s.querySelector('#plSaveQ')); if (sec) { sec.open = true; setTimeout(() => $('#planSettings').scrollIntoView({ behavior: 'smooth' }), 50); } }
+  });
+
+  $('#plTestQ').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+    if (!online && navigator.onLine === false) throw new Error('Нужен интернет');
+    await api('tgQuranTest', {}); toast('Отправлено в Telegram ✓');
+  }));
+  // ── Настройки → Коран → План
+  let pqDraft = null;
+  function pqStartEdit() {
+    if (!meta) return;
+    pqDraft = JSON.parse(JSON.stringify(planCfg()));
+    const R = pqDraft.rev, M = pqDraft.memo, n = cfg().notify || {};
+    $('#pqMethod').value = R.method; $('#pqDays').value = R.days; $('#pqAmount').value = R.amount; $('#pqUnit').value = R.unit;
+    $('#pqRecent').value = R.recent; $('#pqOldDays').value = R.oldDays;
+    $('#pmOn').checked = !!M.on; $('#pmAmount').value = M.amount; $('#pmUnit').value = M.unit; $('#pmOrder').value = M.order; $('#pmStart').value = M.start || '';
+    $('#pqRemOn').checked = !!(n.qrev && n.qrev.on); $('#pqRemTime').value = (n.qrev && n.qrev.time) || '06:00';
+    $('#pmRemOn').checked = !!(n.qmemo && n.qmemo.on); $('#pmRemTime').value = (n.qmemo && n.qmemo.time) || '05:30';
+    pqRender();
+  }
+  function pqRender() {
+    const m = $('#pqMethod').value;
+    $$('[data-pq]').forEach((el) => el.classList.toggle('hidden', el.dataset.pq.split(' ').indexOf(m) < 0));
+    const st = meta ? computeStats(ALL_FROM, today()) : null, M = planCfg().memo;
+    const memN = st ? st.memPages.size : 0;
+    let info = '';
+    if (m === 'cycle') { const d = Math.max(1, Number($('#pqDays').value) || 10); info = `Заучено ${memN} стр. → по ${Math.ceil(memN / d)} стр. (≈ ${(memN / d / 20).toFixed(1)} джуза) в день`; }
+    if (m === 'ratio') { const a = Number($('#pmAmount').value) || M.amount, u = $('#pmUnit').value; info = `Сейчас: ${a} ${u === 'pages' ? 'стр.' : 'строк'} заучивания → ${u === 'pages' ? a * LINES : a} стр. повторения в день`; }
+    if (m === 'sabqi') info = 'Сабак — новое, Сабки — недавно выученное (каждый день), Манзил — всё остальное по кругу.';
+    $('#pqInfo').textContent = info;
+    const pos = M.pos && M.pos.p ? `Следующее: стр. ${M.pos.p}, строка ${M.pos.l}` : 'Начнём с начала выбранного порядка';
+    $('#pmPos').textContent = pos;
+  }
+  ['#pqMethod', '#pqDays', '#pmAmount', '#pmUnit'].forEach((s) => $(s).addEventListener('input', pqRender));
+  $('#pmReset').addEventListener('click', () => { if (!confirmT('Начать заучивание заново с выбранной страницы? Уже выученное не пропадёт.')) return; const P = planCfg(); P.memo.pos = null; P.memo.lastDone = ''; savePlan(P); pqRender(); renderAll(); toast('Позиция сброшена'); });
+  $('#plSaveQ').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+    const num = (s, a, b, d) => Math.min(b, Math.max(a, Number($(s).value) || d));
+    const P = planCfg();
+    const rev = { method: $('#pqMethod').value, days: num('#pqDays', 1, 60, 10), amount: Math.max(0.25, Number(String($('#pqAmount').value).replace(',', '.')) || 1), unit: $('#pqUnit').value,
+      recent: num('#pqRecent', 1, 100, 20), oldDays: num('#pqOldDays', 1, 60, 7) };
+    const startChanged = Number($('#pmStart').value || 0) !== Number(P.memo.start || 0) || $('#pmOrder').value !== P.memo.order;
+    const memo = Object.assign({}, P.memo, { on: $('#pmOn').checked, amount: num('#pmAmount', 1, $('#pmUnit').value === 'pages' ? 20 : 300, 5), unit: $('#pmUnit').value, order: $('#pmOrder').value,
+      start: Number($('#pmStart').value) || ($('#pmOrder').value === 'juz-back' ? 582 : 1) });
+    if (startChanged) memo.pos = null;
+    savePlan({ rev, memo });
+    // напоминания о повторении и заучивании — в общих настройках напоминаний (их отправляет Telegram)
+    const n = Object.assign({}, cfg().notify || {}, { qrev: { on: $('#pqRemOn').checked, time: $('#pqRemTime').value || '06:00' }, qmemo: { on: $('#pmRemOn').checked, time: $('#pmRemTime').value || '05:30' }, lang: LANG });
+    if (online) { try { await saveConfig('notify', n); } catch (x) { toast(x.message, true); } }
+    else { meta.config.notify = n; enqueue('saveConfig', { key: 'notify', value: n }, 'cfg|notify'); }
+    pqStartEdit(); renderAll(); toast('План сохранён ✓');
+  }));
+  openSettingsHooks.push(pqStartEdit);
+
+  // ═════════════ Мусхаф: чтение Корана в приложении ═════════════
+  // Точные страницы Мадинского мусхафа 1441 (KFGQPC V4): один шрифт на страницу, каждое слово — готовый глиф,
+  // разметка строк — открытые данные QUL. Шрифт страницы скачивается один раз и дальше берётся с телефона.
+  const MUSHAF_DATA_V = 1;
+  const MFONT_PKG = 'https://cdn.jsdelivr.net/npm/@tlawat/mushaf-fonts-qpc-v4-tajweed@1.20260912.0/fonts/p';
+  const MFONT_QUL = 'https://static-cdn.tarteel.ai/qul/fonts/quran_fonts/v4-tajweed/woff2/p';
+  // стр. 328 QUL публикует только в формате woff
+  const mFontUrls = (n) => n === 328 ? [MFONT_PKG + '328.woff', MFONT_QUL.replace('/woff2/', '/woff/') + '328.woff'] : [MFONT_PKG + n + '.woff2', MFONT_QUL + n + '.woff2'];
+  const MTEXT_FONT = ['https://cdn.jsdelivr.net/npm/@quran.ws/text@0.1.0/data/UthmanicHafs-v-3.0.ttf'];
+  const MCACHE = 'mytracker-mushaf';
+  // цвета правил таджвида (палитра шрифта №0) и их названия
+  const TJ_RULES = [
+    { e: 3, c: '#b50000', t: 'Мадд лязим — 6 харакатов' },
+    { e: 9, c: '#f40000', t: 'Мадд муттасыль / мунфасыль — 4–5' },
+    { e: 4, c: '#ff7b00', t: 'Мадд при остановке — 2, 4 или 6' },
+    { e: 5, c: '#ce9e00', t: 'Естественный мадд — 2' },
+    { e: 6, c: '#09b000', t: 'Гунна' },
+    { e: 7, c: '#3f48e6', t: 'Тафхим — твёрдые буквы' },
+    { e: 8, c: '#2fadff', t: 'Калькаля' },
+    { e: 'silent', c: '#a5a5a5', t: 'Непроизносимые буквы' }
+  ];
+  const MSET_DEFAULT = { kind: 'v4', tj: 'std', colors: {}, size: 100, keepLines: true, auto: true, secs: 50, autoKind: 0 };
+  const MIN_SECS = 45;
+  const mset = () => Object.assign({}, MSET_DEFAULT, settings.mushaf || {});
+  const arDigits = (n) => String(n).replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[d]);
+  let mData = { v4: null, text: null }, mLoading = {};
+  async function mushafData(kind) {
+    if (mData[kind]) return mData[kind];
+    if (!mLoading[kind]) mLoading[kind] = fetch(`quran/${kind}.json?v=${MUSHAF_DATA_V}`).then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then((d) => (mData[kind] = d)).catch((e) => { delete mLoading[kind]; throw e; });
+    return mLoading[kind];
+  }
+  // ── шрифты страниц
+  const mFonts = {}, mLoaded = new Set();
+  function loadPageFont(n) {
+    if (mFonts[n]) return mFonts[n];
+    const ff = new FontFace('qv4p' + n, mFontUrls(n).map((u) => `url("${u}") format("${/\.woff2$/.test(u) ? 'woff2' : 'woff'}")`).join(', '), { display: 'block' });
+    mFonts[n] = ff.load().then((f) => { document.fonts.add(f); mLoaded.add(n); mPalettes(); return f; }).catch((e) => { delete mFonts[n]; throw e; });
+    return mFonts[n];
+  }
+  let mTextFont = null;
+  function loadTextFont() {
+    if (!mTextFont) {
+      const ff = new FontFace('UthmanicHafs', MTEXT_FONT.map((u) => `url("${u}") format("truetype")`).join(', '), { display: 'swap' });
+      mTextFont = ff.load().then((f) => { document.fonts.add(f); return f; }).catch((e) => { mTextFont = null; throw e; });
+    }
+    return mTextFont;
+  }
+  const isDark = () => { const t = document.documentElement.dataset.theme; return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; };
+  /** Палитра таджвида: правило @font-palette-values для каждого загруженного шрифта страницы. */
+  function paletteBody() {
+    const S = mset(), dark = isDark(), ink = dark ? '#ececec' : '#1b1b1b', ov = ['14 transparent'];
+    let base = dark ? 1 : 0;
+    if (S.tj === 'alt') base = dark ? 1 : 2;
+    if (S.tj === 'off') { base = dark ? 4 : 3; [0, 1, 2, 15, 3, 4, 5, 6, 7, 8, 9].forEach((e) => ov.push(`${e} ${ink}`)); }
+    if (S.tj === 'custom') {
+      TJ_RULES.forEach((r) => { const c = S.colors[r.e]; if (c) (r.e === 'silent' ? [1, 2, 15] : [r.e]).forEach((e) => ov.push(`${e} ${c}`)); });
+    }
+    return `base-palette: ${base}; override-colors: ${ov.join(', ')};`;
+  }
+  function mPalettes() {
+    let el = $('#mPal'); if (!el) { el = document.createElement('style'); el.id = 'mPal'; document.head.appendChild(el); }
+    const body = paletteBody();
+    el.textContent = [...mLoaded].map((n) => `@font-palette-values --qp${n} { font-family: qv4p${n}; ${body} }`).join('\n');
+  }
+  // ── состояние читалки
+  const MST = store.get('lt_mushaf', { page: 1 });
+  let mPage = 1, mTask = null, mSeen = null, mOpen = false, mMarkKind = null;
+  const saveMst = () => store.set('lt_mushaf', MST);
+  function pageInfo(n) {
+    const d = mData.v4; if (!d) return { suras: [], juz: juzOf(n) };
+    const suras = surasOnPage(n);
+    return { suras, juz: juzOf(n), names: suras.map((s) => d.names[s - 1]) };
+  }
+  /** Открыть мусхаф. task: {type:'rev', pages:[…]} | {type:'memo', parts:[{p,a,b}]} */
+  async function openMushaf(opt) {
+    opt = opt || {};
+    mTask = opt.task || null;
+    mPage = Math.min(604, Math.max(1, Number(opt.page) || MST.page || 1));
+    mSeen = { a: mPage, b: mPage }; mMarkKind = null; mSec = 0; mRun = null;
+    $('#mushaf').classList.remove('hidden'); document.documentElement.classList.add('modal-open'); mOpen = true;
+    try { if (!history.state || !history.state.mushaf) history.pushState({ mushaf: 1 }, ''); } catch (e) {}
+    $('#mGo').classList.add('hidden'); $('#mLegend').classList.add('hidden');
+    await mRender();
+  }
+  function closeMushaf(fromHistory) {
+    if (!mOpen) return;
+    mOpen = false; $('#mushaf').classList.add('hidden');
+    if ($('#settings').classList.contains('hidden')) document.documentElement.classList.remove('modal-open');
+    if (!fromHistory) { try { if (history.state && history.state.mushaf) history.back(); } catch (e) {} }
+    mRun = null; renderMushafBar();
+    if (settings.autoSend) scheduleFlush(1500);
+  }
+  window.addEventListener('popstate', () => { if (mOpen) closeMushaf(true); });
+  function mGoPage(n) {
+    n = Math.min(604, Math.max(1, n)); if (n === mPage) return;
+    mPage = n; mSeen.a = Math.min(mSeen.a, n); mSeen.b = Math.max(mSeen.b, n);
+    mSec = 0; mRender();
+  }
+  // ── автоучёт: страница, открытая дольше N секунд (не меньше 45), засчитывается сама
+  let mSec = 0, mRun = null;
+  const mAutoState = () => { let a = store.get('lt_mauto', null); if (!a || a.date !== today()) a = { date: today(), done: {} }; return a; };
+  const mDone = (kind) => new Set((mAutoState().done[kind]) || []);
+  function mAddDone(kind, pages) { const a = mAutoState(); const s = new Set(a.done[kind] || []); pages.forEach((p) => s.add(p)); a.done[kind] = [...s]; store.set('lt_mauto', a); }
+  /** Какой вид записи даёт страница: страница задания на повторение — «Повторение», иначе — вид из настроек. */
+  function mAutoKind(n) {
+    if (!meta) return null;
+    if (mTask && mTask.type === 'memo') return null; // во время заучивания страницы сами не засчитываются
+    if (mTask && mTask.type === 'rev' && mTask.pages.indexOf(n) >= 0) return meta.kinds[2] || meta.kinds[0];
+    return meta.kinds[Number(mset().autoKind) || 0] || meta.kinds[0];
+  }
+  function mCount(n) {
+    const kind = mAutoKind(n); if (!kind || mDone(kind).has(n)) return;
+    mAddDone(kind, [n]);
+    // соседние страницы подряд — одна запись: пока она не отправлена, расширяем её
+    const live = mRun && outbox.find((o) => o.key === mRun.key && !o.sending);
+    if (live && mRun.kind === kind && mRun.date === today() && (n === mRun.b + 1 || n === mRun.a - 1)) { mRun.a = Math.min(mRun.a, n); mRun.b = Math.max(mRun.b, n); }
+    else mRun = { key: 'mauto|' + uid(), kind, date: today(), a: n, b: n };
+    enqueue('addReading', { date: today(), kind, type: 'pages', from: mRun.a, to: mRun.b, repeats: 1, comment: 'Мусхаф · авто' }, mRun.key);
+    renderMTask(); mTick(true);
+  }
+  function mTick(paintOnly) {
+    const btn = $('#mPgBtn'); if (!btn) return;
+    const S = mset(), secs = Math.max(MIN_SECS, Number(S.secs) || 50), kind = mAutoKind(mPage);
+    const on = S.auto && kind && mOpen, done = on && mDone(kind).has(mPage);
+    if (!paintOnly && on && !done && document.visibilityState === 'visible' && !$('#mPage').classList.contains('wait') && $('#mPage .m-lines')) {
+      mSec++; if (mSec >= secs) { mCount(mPage); return; }
+    }
+    btn.classList.toggle('done', !!done);
+    btn.style.setProperty('--prog', on ? (done ? 100 : Math.min(100, mSec / secs * 100)) + '%' : '0%');
+    btn.title = on ? (done ? T('Страница засчитана') : `${T('Засчитается через')} ${Math.max(0, secs - mSec)} ${T('сек.')}`) : '';
+  }
+  setInterval(() => { if (mOpen) mTick(); }, 1000);
+  /** Размер шрифта: страница целиком помещается по ширине и, по возможности, по высоте. */
+  function mFit() {
+    const wrap = $('#mPageWrap'), W = Math.min(wrap.clientWidth - 16, 620), H = wrap.clientHeight - 16;
+    let fs = W / 17.6;
+    if (H > 200) fs = Math.min(fs, H / (15 * 1.92 + 0.9));
+    return Math.max(10, fs);
+  }
+  async function mRender() {
+    const S = mset(), n = mPage, box = $('#mPage');
+    MST.page = n; saveMst();
+    $('#mPgNum').textContent = n;
+    $('#mNext').disabled = n >= 604; $('#mPrev').disabled = n <= 1;
+    renderMTask();
+    let d;
+    try { d = await mushafData('v4'); } catch (e) { box.innerHTML = `<p class="m-msg">${T('Не удалось загрузить разметку мусхафа. Нужен интернет при первом открытии.')}</p>`; return; }
+    const info = pageInfo(n);
+    $('#mSura').textContent = info.suras.map((s) => `${s}. ${suraBy(s).name || d.names[s - 1]}`).join(' · ');
+    $('#mInfo').textContent = `${T('Джуз')} ${info.juz} · ${T('стр.')} ${n}`;
+    const hl = mHighlight(n);
+    box.dataset.p = n; box.className = 'm-page ' + (S.kind === 'text' ? 'text' : 'v4');
+    if (S.kind === 'text') return mRenderText(n, hl);
+    const fs = mFit(); box.style.fontSize = fs + 'px';
+    const page = d.pages[n - 1];
+    const html = page.map((ln, i) => {
+      const cls = hl.lines.has(i + 1) ? ' hl' : '';
+      if (ln[0] === 0) return `<div class="m-head${cls}"><span class="ar">سُورَةُ ${esc(d.names[ln[1] - 1])}</span></div>`;
+      if (ln[0] === 1) return `<div class="m-basm${cls}"><span class="ar">بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ</span></div>`;
+      const g = ln[2], r = ln[3]; let k = 0, out = '';
+      for (let j = 0; j < r.length; j += 3) { out += `<span data-a="${r[j]}:${r[j + 1]}">${g.slice(k, k + r[j + 2])}</span>`; k += r[j + 2]; }
+      return `<div class="m-line${ln[1] ? ' c' : ''}${cls}" data-l="${i + 1}">${out}</div>`;
+    }).join('');
+    const ready = mLoaded.has(n);
+    box.innerHTML = `<div class="m-lines${n <= 2 ? ' short' : ''}" style="font-family:qv4p${n};font-palette:--qp${n}">${html}</div>` + (ready ? '' : `<div class="m-loading">${T('Загрузка страницы…')}</div>`);
+    box.classList.toggle('wait', !ready);
+    if (!ready) {
+      try { await loadPageFont(n); }
+      catch (e) { if (mPage === n) box.innerHTML = `<p class="m-msg">${T('Страница ещё не скачана. Подключитесь к интернету или скачайте весь Коран заранее: ⚙ → Коран → Мусхаф.')}</p>`; return; }
+      if (mPage !== n) return;
+      box.classList.remove('wait'); const l = box.querySelector('.m-loading'); if (l) l.remove();
+    }
+    // соседние страницы — заранее, чтобы листалось без задержки
+    [n + 1, n - 1, n + 2].forEach((p) => { if (p >= 1 && p <= 604) loadPageFont(p).catch(() => {}); });
+  }
+  async function mRenderText(n, hl) {
+    const S = mset(), box = $('#mPage');
+    let t; try { t = await mushafData('text'); } catch (e) { box.innerHTML = `<p class="m-msg">${T('Не удалось загрузить текст. Нужен интернет при первом открытии.')}</p>`; return; }
+    if (mPage !== n) return;
+    const d = mData.v4, page = t.pages[n - 1];
+    const html = page.map((ln, i) => {
+      const cls = hl.lines.has(i + 1) ? ' hl' : '';
+      if (ln[0] === 0) return `<div class="m-head${cls}"><span class="ar">سُورَةُ ${esc(d.names[ln[1] - 1])}</span></div>`;
+      if (ln[0] === 1) return `<div class="m-basm${cls}">بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ</div>`;
+      const s = ln[2]; let out = '';
+      for (let j = 0; j < s.length; j += 4) out += `<span data-a="${s[j]}:${s[j + 1]}">${esc(s[j + 2])}${s[j + 3] ? ` <span class="m-an">${arDigits(s[j + 1])}</span>` : ''}</span> `;
+      return `<div class="m-line${ln[1] ? ' c' : ''}${cls}" data-l="${i + 1}">${out.trim()}</div>`;
+    }).join('');
+    box.classList.toggle('wrap', !S.keepLines);
+    box.innerHTML = `<div class="m-lines${n <= 2 ? ' short' : ''}">${html}</div>`;
+    loadTextFont().then(() => { if (mPage === n) mFitText(); }).catch(() => mFitText());
+    mFitText();
+  }
+  /** Текстовый мусхаф: строки мусхафа сохраняются — шрифт подбирается под самую длинную строку; иначе текст переносится. */
+  function mFitText() {
+    const S = mset(), box = $('#mPage'), lines = box.querySelector('.m-lines'); if (!lines) return;
+    const W = Math.min($('#mPageWrap').clientWidth - 16, 680), base = W / 17.4 * 1.15;
+    if (!S.keepLines) { box.style.fontSize = (base * S.size / 100) + 'px'; return; }
+    box.style.fontSize = '20px';
+    let max = 0; lines.querySelectorAll('.m-line').forEach((l) => { l.style.width = 'max-content'; max = Math.max(max, l.scrollWidth); l.style.width = ''; });
+    const fit = max ? 20 * W / (max + 22) : base; // + поля страницы (≈ 1 em)
+    box.style.fontSize = Math.max(10, Math.min(fit, base * 1.6)) + 'px';
+  }
+  /** Что подсветить на странице: строки задания на заучивание. */
+  function mHighlight(n) {
+    const lines = new Set();
+    if (mTask && mTask.type === 'memo') {
+      // строки считаются как в плане заучивания: 15 строк на странице, по порядку сверху
+      mTask.parts.filter((x) => x.p === n).forEach((x) => { for (let l = x.a; l <= x.b; l++) lines.add(l); });
+    }
+    return { lines };
+  }
+  function renderMTask() {
+    const el = $('#mTask'), act = $('#mAct');
+    if (mTask && mTask.type === 'rev') {
+      const R = revisionToday(), D = pageDates();
+      const left = R && R.pages ? R.pages.filter((p) => !D.todayRev.has(p)) : [];
+      const i = mTask.pages.indexOf(mPage);
+      el.innerHTML = `<b>🔁 ${T('Повторение')}:</b> ${mTask.pages.length ? pageRanges(mTask.pages).map((r) => T(rangeText(r))).join(', ') : ''}${i >= 0 ? ` · <span class="muted">${T('эта страница')} ${i + 1} ${T('из')} ${mTask.pages.length}</span>` : ''}`;
+      el.classList.remove('hidden');
+      const nextP = mTask.pages.find((p) => p > mPage);
+      act.innerHTML = (left.length ? `<button type="button" class="btn primary grow" data-m="revdone">${T('✓ Повторил всё')}</button>` : `<div class="plan-ok">${T('✓ На сегодня всё повторено')}</div>`) +
+        (nextP && nextP !== mPage + 1 ? `<button type="button" class="btn ghost" data-m="go" data-p="${nextP}">${T('К стр.')} ${nextP}</button>` : '');
+      return;
+    }
+    if (mTask && mTask.type === 'memo') {
+      const M = memoToday();
+      el.innerHTML = `<b>📗 ${T('Выучить')}:</b> ${esc(T(mTask.text || ''))}`; el.classList.remove('hidden');
+      act.innerHTML = M && !M.done && !M.finished ? `<button type="button" class="btn primary grow" data-m="memodone">${T('✓ Выучил')}</button><button type="button" class="btn ghost grow" data-m="later">${T('Ещё не выучил')}</button>` : `<div class="plan-ok">${T('✓ Сегодня выучено')}</div>`;
+      return;
+    }
+    el.classList.add('hidden');
+    const range = mSeen ? (mSeen.a === mSeen.b ? `${T('стр.')} ${mSeen.a}` : `${T('стр.')} ${mSeen.a}–${mSeen.b}`) : '';
+    if (mMarkKind != null) {
+      const K = meta ? meta.kinds : [];
+      act.innerHTML = `<div class="m-mark"><div class="small">${T('Записать')} <b>${range}</b> ${T('как')}:</div><div class="chips select">${K.map((k, i) => `<button type="button" class="chip${i === mMarkKind ? ' on' : ''}" data-m="kind" data-k="${i}">${esc(k)}</button>`).join('')}</div>
+        <div class="row gap"><button type="button" class="btn primary grow" data-m="save">${T('Сохранить')}</button><button type="button" class="btn ghost" data-m="cancel">${T('Отмена')}</button></div></div>`;
+    } else {
+      const k = mAutoKind(mPage), n = k ? mDone(k).size : 0;
+      act.innerHTML = `<button type="button" class="btn ghost grow" data-m="mark">✓ ${T('Прочитал')}: ${range}</button>` +
+        (mset().auto && n ? `<div class="m-auto muted small">${T('Засчитано сегодня')}: ${n} ${T('стр.')} (${esc(k)})</div>` : '');
+    }
+  }
+  $('#mAct').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-m]'); if (!b) return;
+    const m = b.dataset.m;
+    if (m === 'revdone') { const R = revisionToday(), D = pageDates(); revDone(pageRanges(R.pages.filter((p) => !D.todayRev.has(p)))); renderMTask(); }
+    else if (m === 'memodone') { memoDone(); renderMTask(); }
+    else if (m === 'later') toast('Хорошо — завтра будет то же самое задание. Повторяйте, пока не выучите');
+    else if (m === 'go') mGoPage(Number(b.dataset.p));
+    else if (m === 'mark') { mMarkKind = Math.max(0, meta ? meta.kinds.indexOf(settings.quran.kind || meta.kinds[0]) : 0); renderMTask(); }
+    else if (m === 'kind') { mMarkKind = Number(b.dataset.k); renderMTask(); }
+    else if (m === 'cancel') { mMarkKind = null; renderMTask(); }
+    else if (m === 'save') {
+      const kind = meta.kinds[mMarkKind] || meta.kinds[0], already = mDone(kind), pages = [];
+      for (let q = mSeen.a; q <= mSeen.b; q++) if (!already.has(q)) pages.push(q);
+      if (!pages.length) { toast('Эти страницы уже засчитаны сегодня ✓'); mMarkKind = null; renderMTask(); return; }
+      const rs = pageRanges(pages), ops = rs.map(([a, b]) => enqueue('addReading', { date: today(), kind, type: 'pages', from: a, to: b, repeats: 1, comment: 'Мусхаф' }).id);
+      mAddDone(kind, pages); mTick(true);
+      const txt = rs.map(([a, b]) => (a === b ? a : a + '–' + b)).join(', ');
+      const u = pushUndo({ tab: 'quran', type: 'add', ops, del: 'deleteReading', label: `${kind}: ${T('стр.')} ${txt}` });
+      toast(`${T('Записано')} ✓ ${kind}: ${txt}`, false, u);
+      mMarkKind = null; mSeen = { a: mPage, b: mPage }; renderAll(); renderMTask();
+      if (settings.autoSend) scheduleFlush(1500);
+    }
+  });
+  // ── листание: как в бумажном мусхафе, следующая страница — слева
+  $('#mNext').addEventListener('click', () => mGoPage(mPage + 1));
+  $('#mPrev').addEventListener('click', () => mGoPage(mPage - 1));
+  $('#mClose').addEventListener('click', () => closeMushaf());
+  (function () {
+    let x0 = null, y0 = 0, t0 = 0;
+    const w = $('#mPageWrap');
+    w.addEventListener('touchstart', (e) => { if (e.touches.length !== 1) { x0 = null; return; } x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now(); }, { passive: true });
+    w.addEventListener('touchend', (e) => {
+      if (x0 == null) return; const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0; x0 = null;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - t0 < 800) mGoPage(mPage + (dx > 0 ? 1 : -1));
+    }, { passive: true });
+  })();
+  document.addEventListener('keydown', (e) => {
+    if (!mOpen || /INPUT|SELECT|TEXTAREA/.test((e.target.tagName || ''))) return;
+    if (e.key === 'ArrowLeft') mGoPage(mPage + 1); else if (e.key === 'ArrowRight') mGoPage(mPage - 1); else if (e.key === 'Escape') closeMushaf();
+  });
+  window.addEventListener('resize', () => { if (mOpen) mRender(); });
+  // ── переход: страница, сура, джуз
+  $('#mPgBtn').addEventListener('click', () => {
+    const g = $('#mGo'); g.classList.toggle('hidden'); $('#mLegend').classList.add('hidden');
+    if (!g.classList.contains('hidden')) {
+      $('#mGoPage').value = mPage;
+      if (!$('#mGoSura').options.length) {
+        $('#mGoSura').innerHTML = `<option value="">${T('Сура…')}</option>` + Array.from({ length: 114 }, (_, i) => `<option value="${i + 1}">${i + 1}. ${esc(suraBy(i + 1).name || (mData.v4 ? mData.v4.names[i] : ''))}</option>`).join('');
+        $('#mGoJuz').innerHTML = `<option value="">${T('Джуз…')}</option>` + JUZ_START.map((p, i) => `<option value="${p}">${T('Джуз')} ${i + 1}</option>`).join('');
+      }
+    }
+  });
+  $('#mGoBtn').addEventListener('click', () => { const v = Number($('#mGoPage').value); if (v) { $('#mGo').classList.add('hidden'); mSeen = { a: v, b: v }; mGoPage(v); } });
+  $('#mGoSura').addEventListener('change', (e) => { const n = Number(e.target.value); if (n) { const p = suraPages(n)[0]; $('#mGo').classList.add('hidden'); mSeen = { a: p, b: p }; mGoPage(p); e.target.value = ''; } });
+  $('#mGoJuz').addEventListener('change', (e) => { const p = Number(e.target.value); if (p) { $('#mGo').classList.add('hidden'); mSeen = { a: p, b: p }; mGoPage(p); e.target.value = ''; } });
+  // ── быстрый выбор таджвида прямо в читалке
+  function legendHtml() {
+    const S = mset();
+    const modes = [['std', 'Таджвид'], ['alt', 'Другие оттенки'], ['off', 'Без таджвида'], ['custom', 'Свои цвета']];
+    const kinds = [['v4', 'Точные страницы'], ['text', 'Шрифт «Усмани»']];
+    return `<div class="chips select">${kinds.map(([v, t]) => `<button type="button" class="chip${S.kind === v ? ' on' : ''}" data-mk="${v}">${T(t)}</button>`).join('')}</div>
+      ${S.kind === 'v4' ? `<div class="chips select">${modes.map(([v, t]) => `<button type="button" class="chip${S.tj === v ? ' on' : ''}" data-mt="${v}">${T(t)}</button>`).join('')}</div>
+      ${S.tj !== 'off' ? `<div class="tj-legend">${TJ_RULES.map((r) => `<span><i style="background:${(S.tj === 'custom' && S.colors[r.e]) || r.c}"></i>${T(r.t)}</span>`).join('')}</div>` : ''}` : `<p class="muted small">${T('В этом виде таджвида нет: обычный шрифт, зато его можно увеличить (⚙ → Коран → Мусхаф).')}</p>`}`;
+  }
+  $('#mTj').addEventListener('click', () => { const l = $('#mLegend'); l.innerHTML = legendHtml(); l.classList.toggle('hidden'); $('#mGo').classList.add('hidden'); });
+  $('#mLegend').addEventListener('click', (e) => {
+    const k = e.target.closest('[data-mk]'), t = e.target.closest('[data-mt]'); if (!k && !t) return;
+    settings.mushaf = Object.assign(mset(), k ? { kind: k.dataset.mk } : { tj: t.dataset.mt }); saveSettings();
+    mPalettes(); $('#mLegend').innerHTML = legendHtml(); mRender(); fillMushafSettings();
+  });
+  // тема поменялась — палитра тоже (тёмная тема: светлые буквы)
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', mPalettes);
+  // ── вход: кнопка на вкладке «Коран», «План на сегодня», карта хифза
+  function renderMushafBar() {
+    const b = $('#mOpenBtn'); if (!b) return;
+    b.innerHTML = `📖 ${T('Мусхаф')} <span class="muted small">· ${MST.page > 1 ? `${T('продолжить со стр.')} ${MST.page}` : T('открыть')}</span>`;
+  }
+  $('#mOpenBtn').addEventListener('click', () => openMushaf({ page: MST.page }));
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-mopen]'); if (!b) return;
+    const k = b.dataset.mopen;
+    if (k === 'rev') { const R = revisionToday(), D = pageDates(); const left = R.pages.filter((p) => !D.todayRev.has(p)).sort((a, b) => a - b); const pages = R.pages.slice().sort((a, b) => a - b); openMushaf({ page: left[0] || pages[0], task: { type: 'rev', pages } }); }
+    else if (k === 'memo') { const M = memoToday(); if (M && M.parts) openMushaf({ page: M.parts[0].p, task: { type: 'memo', parts: M.parts, text: M.text } }); }
+    else openMushaf({ page: Number(k) });
+  });
+  // ── настройки: вид мусхафа, таджвид, свои цвета, скачивание для офлайна
+  function fillMushafSettings() {
+    const S = mset();
+    if (!$('#msKind')) return;
+    $('#msKind').value = S.kind; $('#msTj').value = S.tj; $('#msSize').value = S.size; $('#msKeep').checked = !!S.keepLines;
+    $('#msSizeV').textContent = S.size + '%';
+    $$('[data-ms]').forEach((el) => el.classList.toggle('hidden', el.dataset.ms.split(' ').indexOf(S.kind + (S.kind === 'v4' ? '-' + S.tj : '')) < 0 && el.dataset.ms.split(' ').indexOf(S.kind) < 0));
+    $('#msColors').innerHTML = TJ_RULES.map((r) => `<label class="tj-color"><input type="color" data-tjc="${r.e}" value="${S.colors[r.e] || r.c}"><span>${T(r.t)}</span></label>`).join('') +
+      `<button type="button" class="btn ghost block" id="msColorsReset">${T('Вернуть стандартные цвета')}</button>`;
+    mDlInfo();
+  }
+  function msSave(patch) { settings.mushaf = Object.assign(mset(), patch); saveSettings(); mPalettes(); fillMushafSettings(); if (mOpen) mRender(); }
+  $('#msKind').addEventListener('change', (e) => msSave({ kind: e.target.value }));
+  $('#msTj').addEventListener('change', (e) => msSave({ tj: e.target.value }));
+  $('#msSize').addEventListener('input', (e) => { $('#msSizeV').textContent = e.target.value + '%'; });
+  $('#msSize').addEventListener('change', (e) => msSave({ size: Number(e.target.value) || 100 }));
+  $('#msKeep').addEventListener('change', (e) => msSave({ keepLines: e.target.checked }));
+  $('#msColors').addEventListener('input', (e) => { const k = e.target.dataset.tjc; if (!k) return; const c = Object.assign({}, mset().colors, { [k]: e.target.value }); settings.mushaf = Object.assign(mset(), { colors: c }); saveSettings(); mPalettes(); });
+  $('#msColors').addEventListener('click', (e) => { if (e.target.id === 'msColorsReset') msSave({ colors: {} }); });
+  $('#msOpen').addEventListener('click', () => { closeSettings(); openMushaf({ page: MST.page }); });
+  // ── скачать весь Коран: 604 шрифта страниц (≈ 51 МБ), один раз
+  async function mCachedPages() {
+    if (!('caches' in window)) return new Set();
+    try { const keys = await (await caches.open(MCACHE)).keys(), s = new Set(); keys.forEach((r) => { const m = /\/p(\d+)\.woff2?$/.exec(r.url); if (m) s.add(Number(m[1])); }); return s; } catch (e) { return new Set(); }
+  }
+  let mDl = null;
+  async function mDlInfo() {
+    const el = $('#msDlInfo'); if (!el) return;
+    if (mDl) return;
+    const s = await mCachedPages();
+    el.textContent = s.size >= 604 ? T('Весь Коран скачан — читается без интернета ✓') : s.size ? `${T('Скачано страниц')}: ${s.size} ${T('из')} 604` : T('Страницы скачиваются, когда вы их открываете. Можно скачать всё сразу (≈ 51 МБ).');
+    $('#msDl').classList.toggle('hidden', s.size >= 604); $('#msDel').classList.toggle('hidden', !s.size);
+  }
+  $('#msDl').addEventListener('click', async () => {
+    if (mDl) { mDl.stop = true; return; }
+    if (!('caches' in window)) { toast('Этот браузер не умеет хранить файлы для офлайна', true); return; }
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+    mDl = { stop: false }; $('#msDl').textContent = T('Остановить');
+    const cache = await caches.open(MCACHE), have = await mCachedPages(), todo = [];
+    for (let p = 1; p <= 604; p++) if (!have.has(p)) todo.push(p);
+    let done = have.size, fail = 0;
+    const one = async (p) => {
+      for (const u of mFontUrls(p)) {
+        try { const r = await fetch(u, { mode: 'cors' }); if (r.ok) { await cache.put(u, r); return; } } catch (e) {}
+      }
+      fail++;
+    };
+    const workers = Array.from({ length: 6 }, async () => { while (todo.length && !mDl.stop) { await one(todo.shift()); done++; $('#msDlInfo').textContent = `${T('Скачивание')}: ${done} ${T('из')} 604…`; } });
+    await Promise.all(workers);
+    const stopped = mDl.stop; mDl = null; $('#msDl').textContent = T('Скачать весь Коран');
+    try { await mushafData('v4'); if (mset().kind === 'text') { await mushafData('text'); await loadTextFont(); } } catch (e) {}
+    await mDlInfo();
+    if (fail) toast(`${T('Не скачалось страниц')}: ${fail}. ${T('Нажмите ещё раз, когда будет интернет')}`, true);
+    else if (!stopped) toast('Весь Коран скачан ✓');
+  });
+  $('#msDel').addEventListener('click', async () => {
+    if (!confirmT('Удалить скачанные страницы мусхафа с телефона? Их можно будет скачать снова.')) return;
+    try { await caches.delete(MCACHE); } catch (e) {}
+    toast('Скачанные страницы удалены'); mDlInfo();
+  });
+  openSettingsHooks.push(fillMushafSettings);
+  renderMushafBar();
+  mPalettes();
+
   // ── отрисовка всего (без запросов)
   function renderAll() {
     renderPending();
     if (!meta) return;
     if (pDate) { const keep = activePrayer; showPrayerDayState(); activePrayer = keep; paintPrayers(); }
-    renderPrayerRecent(); renderReadingRecent(); renderFinanceRecent(); renderQueue(); renderRecurBox(); updateBudgetHint();
+    renderPrayerRecent(); renderReadingRecent(); renderFinanceRecent(); renderQueue(); renderRecurBox(); updateBudgetHint(); renderDebtBox(); renderPerson(); renderPlanBox();
     if (currentTab === 'dash') renderStats();
   }
   /** Подтянуть состояние дня из данных, не сбрасывая выбранную молитву (после синхронизации). */
